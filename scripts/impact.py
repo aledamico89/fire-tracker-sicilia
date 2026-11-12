@@ -1,6 +1,6 @@
 """Impatto fisico di ogni area bruciata: pendenze (Copernicus DEM 30 m), edifici e strade (OpenStreetMap),
 aree protette (Natura 2000, EEA). Uso: python3 scripts/impact.py monreale 2023 → web/data/impatto_<comune>_<anno>.json"""
-import json, os, sys, urllib.parse, urllib.request
+import json, os, re, sys, urllib.parse, urllib.request
 import numpy as np, rasterio
 from rasterio.merge import merge
 from rasterio.features import rasterize
@@ -69,12 +69,13 @@ for k, g in G.items():
     for i in rt.query(gu.buffer(100)):
         ln, t = rd[i]; L = ln.intersection(gu.buffer(100)).length
         if L > 0:
-            n = t.get("ref") or t.get("name") or {"residential": "strade urbane", "unclassified": "strade locali"}.get(t["highway"], t["highway"])
+            n = re.sub(r"[<>\"'`&]", "", str(t.get("ref") or t.get("name") or "")) or None
+            n = n or {"residential": "strade urbane", "unclassified": "strade locali"}.get(t["highway"], t["highway"])
             roads[n] = roads.get(n, 0) + L
     prot = {}
     for ng, pr in nat:
         if ng.intersects(gu):
-            prot[pr["SITECODE"]] = [pr["SITENAME"], round(ng.intersection(gu).area / 1e4, 1)]
+            prot[pr["SITECODE"]] = [re.sub(r"[<>\"'`&]", "", pr["SITENAME"]), round(ng.intersection(gu).area / 1e4, 1)]
     out[k] = {"pend_media": round(float(s.mean()), 1), "pend_ripida_pct": round(float((s > 30).mean()), 2),
               "quota": [int(z.min()), int(z.max())], "edifici_dentro": len(inside), "edifici_200m": len(near) - len(inside),
               "strade_km": round(sum(roads.values()) / 1000, 2),
