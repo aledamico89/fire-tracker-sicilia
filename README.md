@@ -1,5 +1,7 @@
 # Fire Tracker Sicilia
 
+Ideazione e design: **Alessio D'Amico** · [alessiodamico.com](https://alessiodamico.com)
+
 Dashboard open source per visualizzare e studiare gli incendi in Sicilia.
 Prima tappa: **replay degli incendi del 22–28 luglio 2023** (Palermo, 24–25 luglio) con focolai satellitari, vento orario e terreno 3D.
 

@@ -6,6 +6,8 @@
 <title>Rischio Incendi Sicilia</title>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="common.css">
+<script src="common.js"></script>
 <style>
 :root{--bg:#0e0f11;--panel:rgba(18,19,22,.9);--line:#2a2c31;--txt:#e9e6e1;--mut:#8d8a85;--fire:#ff6a00;--hot:#ffd166}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,-apple-system,sans-serif}
@@ -35,7 +37,6 @@ a{color:var(--hot)}details{margin-top:12px;color:var(--mut);font-size:12px}summa
 <div id="map"></div>
 <div id="side" class="panel">
   <h1>Fire Tracker <span>Sicilia</span></h1>
-  <nav><a href="./">Evento 2023</a><a href="storico.html">Storico</a><a class="on" href="rischio.html">Rischio previsto</a><a href="catasto.html">Dopo l'incendio</a></nav>
   <div class="run" id="run"></div>
   <div id="days"></div>
   <div class="seg"><button id="mF" class="on">Pericolo meteo</button><button id="mP">Priorità</button><button id="mM" hidden>Modello ML</button></div>
@@ -76,9 +77,10 @@ const pcls = s => s >= 6 ? 3 : s >= 4 ? 2 : s >= 2 ? 1 : 0;
 const dayFmt = d => new Date(d + 'T12:00Z').toLocaleDateString('it-IT', {weekday:'short', day:'numeric', timeZone:'Europe/Rome'});
 
 const map = new maplibregl.Map({container:'map', center:[14.1, 37.55], zoom:7.4, style:{version:8, sources:{
-  sat:{type:'raster', tileSize:256, maxzoom:15, attribution:'Sentinel-2 cloudless 2020 © EOX', tiles:['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg']}},
+  sat: FT.sat},
   layers:[{id:'sat', type:'raster', source:'sat', paint:{'raster-brightness-max':.5, 'raster-saturation':-.7}}]}});
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
+FT.enhance(map);
 new ResizeObserver(() => map.resize()).observe($('map'));
 
 const ML_C = [[.5,'Molto bassa','#3d6b4a'],[1,'Bassa','#8bc34a'],[2,'Media','#ffc107'],[5,'Alta','#ff7043'],[10,'Molto alta','#d32f2f'],[1e9,'Estrema','#b04bd6']];
@@ -98,6 +100,7 @@ Promise.all(['forecast.json', 'history.json', 'comuni.geojson'].map(f => fetch('
   }
   const ratio = (i, d) => F.p[i][d] / M.base_rate;
   const C = H.comuni, n = C.length, sorted = C.map(c => c[4]).sort((a, b) => b - a);
+  FT.search(map, C.map(c => c[0]), G, i => show(i));
   const t10 = sorted[Math.floor(n * .1)], t40 = sorted[Math.floor(n * .4)];
   const hist = C.map(c => c[4] > t10 ? 2 : c[4] > t40 ? 1 : 0);
   let day = 0, mode = 'F', sel = -1;

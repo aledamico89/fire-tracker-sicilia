@@ -1,0 +1,13 @@
+/* Elementi condivisi da tutte le pagine */
+.ft-nav{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:2px;padding:3px;background:rgba(18,19,22,.92);backdrop-filter:blur(8px);border:1px solid #2a2c31;border-radius:10px;font:13px/1 system-ui,-apple-system,sans-serif}
+.ft-nav a{color:#8d8a85;text-decoration:none;padding:7px 12px;border-radius:7px;white-space:nowrap}.ft-nav a:hover{color:#e9e6e1}
+.ft-nav a.on{background:#2a2c31;color:#e9e6e1;box-shadow:inset 0 -2px 0 #ff6a00}
+.ft-foot{margin-top:18px;padding-top:10px;border-top:1px solid #2a2c31;font-size:11px;line-height:1.5;color:#8d8a85}.ft-foot a{color:#e9e6e1}
+.maplibregl-popup-content{background:#17181b!important;color:#e9e6e1!important;border:1px solid #2a2c31;border-radius:8px!important;padding:8px 11px!important;font:13px/1.4 system-ui,-apple-system,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.5)!important}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip{border-top-color:#17181b!important}
+.maplibregl-popup-anchor-top .maplibregl-popup-tip,.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,.maplibregl-popup-anchor-top-right .maplibregl-popup-tip{border-bottom-color:#17181b!important}
+.maplibregl-popup-anchor-left .maplibregl-popup-tip{border-right-color:#17181b!important}.maplibregl-popup-anchor-right .maplibregl-popup-tip{border-left-color:#17181b!important}
+.ft-search{position:relative;margin:10px 0 4px}.ft-search input{width:100%;background:#1a1b1f;border:1px solid #2a2c31;border-radius:8px;color:#e9e6e1;padding:8px 10px 8px 30px;font:inherit;font-size:13px}
+.ft-search::before{content:"⌕";position:absolute;left:10px;top:6px;color:#8d8a85;font-size:16px}
+@media(max-width:1150px){.ft-nav{top:auto;bottom:0;left:0;right:0;transform:none;border-radius:0;border-width:1px 0 0;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .ft-nav a{padding:9px 6px;font-size:12px}.maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{bottom:48px}}

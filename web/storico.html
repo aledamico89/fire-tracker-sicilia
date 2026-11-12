@@ -6,6 +6,8 @@
 <title>Storico Incendi Sicilia</title>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="common.css">
+<script src="common.js"></script>
 <style>
 :root{--bg:#0e0f11;--panel:rgba(18,19,22,.9);--line:#2a2c31;--txt:#e9e6e1;--mut:#8d8a85;--fire:#ff6a00;--hot:#ffd166}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,-apple-system,sans-serif}
@@ -32,7 +34,6 @@ details{margin-top:12px;color:var(--mut);font-size:12px}summary{cursor:pointer;c
 <div id="map"></div>
 <div id="side" class="panel">
   <h1>Fire Tracker <span>Sicilia</span></h1>
-  <nav><a href="./">Evento 2023</a><a class="on" href="storico.html">Storico</a><a href="rischio.html">Rischio previsto</a><a href="catasto.html">Dopo l'incendio</a></nav>
   <div class="stats">
     <div class="stat"><b id="sDet">–</b><small>rilevazioni</small></div>
     <div class="stat"><b id="sIgn">–</b><small>inneschi stimati</small></div>
@@ -76,14 +77,16 @@ function bars(cv, vals, labels, hi = -1, color = '#ff6a00') {
     if (labels[i]) { g.fillStyle = '#8d8a85'; g.fillText(labels[i], i * bw + bw / 2, h - 1); } });
 }
 const map = new maplibregl.Map({container:'map', center:[14.1, 37.55], zoom:7.4, style:{version:8, sources:{
-  sat:{type:'raster', tileSize:256, maxzoom:15, attribution:'Sentinel-2 cloudless 2020 © EOX', tiles:['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg']}},
+  sat: FT.sat},
   layers:[{id:'sat', type:'raster', source:'sat', paint:{'raster-brightness-max':.55, 'raster-saturation':-.6}}]}});
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
+FT.enhance(map);
 new ResizeObserver(() => map.resize()).observe($('map'));
 
 Promise.all([fetch('data/history.json').then(r => r.json()), fetch('data/comuni.geojson').then(r => r.json()), new Promise(r => map.on('load', r))])
 .then(([H, G]) => {
   const C = H.comuni, ign = C.map(c => c[4]), rank = [...ign.keys()].sort((a, b) => ign[b] - ign[a]);
+  FT.search(map, C.map(c => c[0]), G, i => show(i));
   $('sDet').textContent = nf(H.det.reduce((a, b) => a + b));
   $('sIgn').textContent = nf(H.ign.reduce((a, b) => a + b));
   $('sRec').textContent = nf(H.cells.filter(c => c[2] >= 5).length);
