@@ -194,6 +194,7 @@ Promise.all([fetch(`data/catasto_${C}_${Y}.json`).then(r => r.json()), fetch(`da
   map.on('mouseenter', 'af', () => map.getCanvas().style.cursor = 'pointer'); map.on('mouseleave', 'af', () => map.getCanvas().style.cursor = '');
   $('leg').innerHTML = GR.map(g => `<span><i style="background:${g[1]}"></i>${g[0]}</span>`).join('') + '<span><i style="border:2px solid #fff"></i>con vincolo</span>';
   list();
+  try { const k = sessionStorage.getItem('k_' + C); if (k) unlock(k).catch(() => {}); } catch (_) {}
   const s = +Q.get('a'); if (s) show(s, true);
   }; map.loaded() ? layers() : map.on('load', layers);
 });
@@ -216,7 +217,7 @@ function dashboard(h) {
     [eur(danno), 'danno a boschi e macchia', 'ordine di grandezza'], [eur(costo), 'costo interventi proposti', 'stabilizzazione, ripristino, prevenzione'],
     [fmt(skm, 0) + ' km', 'di strade entro 100 m', `${n2k.size} siti Natura 2000 toccati`]]
     .map(k => `<div><b>${k[0]}</b><small>${k[1]}</small><small>${k[2]}</small></div>`).join('');
-  const pc = sum(p => p.particelle?.length || 0);
+  const pc = sum(p => p.n_particelle || 0);
   $('todo').innerHTML = [
     [`Approvare il catasto ${D.anno} delle aree percorse dal fuoco`, `${A.filter(p => p.vincolo).length} aree con vincolo, ${fmt(pc)} particelle individuate. Pubblicazione all'albo e osservazioni per 30 giorni.`],
     [`Ordinanza di divieto di pascolo e caccia`, `${fmt(haV)} ha di boschi e pascoli, per 10 anni.`],
@@ -282,7 +283,7 @@ function show(id, fly) {
     rk(im.edifici_dentro > 0 ? 'hi' : im.edifici_200m > 0 ? 'me' : 'lo', 'Case', `${E.nb} edifici esposti`),
     rk(im.strade_km > 1 ? 'hi' : im.strade_km > .2 ? 'me' : 'lo', 'Strade', `${fmt(im.strade_km, 1)} km`),
     rk(n2k.length ? 'hi' : 'lo', 'Natura', n2k.length ? 'area protetta' : 'fuori aree protette')].join('') : '';
-  const pc = p.particelle || [], fogli = {}; pc.forEach(([, fg, pa]) => (fogli[fg] = fogli[fg] || []).push(pa));
+  const pc = R ? p.particelle || [] : [], fogli = {}; pc.forEach(([, fg, pa]) => (fogli[fg] = fogli[fg] || []).push(pa));
   $('cb').innerHTML = `<h3>Area ${p.id} <span class="tag ${p.prio == 'alta' ? 'pA' : p.prio == 'media' ? 'pM' : 'pB'}" style="vertical-align:middle">priorità ${p.prio}</span></h3>
     <div class="sub">${p.dal == p.al ? dt(p.dal) : dt(p.dal) + ' – ' + dt(p.al)} · ${fmt(p.ha, 1)} ha · gravità ${p.gravita}</div>
     <button class="big" onclick="viewer(${p.id})">Guarda prima e dopo (immagini satellitari)</button>
@@ -298,7 +299,7 @@ function show(id, fly) {
       : `<p class="sub">Prevalgono coltivi (bosco e pascolo ${Math.round(p.bosco_pascolo * 100)}%): vincoli da valutare particella per particella.</p>`}
     <h2>Copertura del suolo</h2><div class="bar">${lc.map(([k, v]) => `<i style="width:${v * 100}%;background:${(LC[k] || ['', '#666'])[1]}"></i>`).join('')}</div>
     <div class="legend">${lc.map(([k, v]) => `<span><i style="background:${(LC[k] || ['', '#666'])[1]}"></i>${(LC[k] || ['Altro'])[0]} ${Math.round(v * 100)}%</span>`).join('')}</div>
-    <h2>Particelle catastali (${pc.length})</h2><div class="parc">${Object.entries(fogli).map(([fg, ps]) => `<b>Foglio ${fg}</b>: ${ps.join(', ')}`).join('<br>') || 'in elaborazione'}</div>`;
+    <h2>Particelle catastali (${p.n_particelle || 0})</h2>${R ? `<div class="parc">${Object.entries(fogli).map(([fg, ps]) => `<b>Foglio ${fg}</b>: ${ps.join(', ')}`).join('<br>') || 'nessuna'}</div>` : lockBox()}`;
   $('card').style.display = 'block'; $('card').scrollTop = 0;
 }
 function hide() { $('card').style.display = 'none'; if (sel) map.setFeatureState({source:'a', id:sel}, {sel:false}); sel = null; }
@@ -349,6 +350,22 @@ cmp.onmousedown = e => { drag = true; slide(e); }; onmouseup = () => drag = fals
 function save(c, nm) { $(c).toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${C}_${Y}_area${V.id}_${nm}_${(nm == 'prima' ? $('dA') : $('dB')).textContent.trim().slice(0, 10).replaceAll('/', '-')}.png`; a.click(); }); }
 function tab(c) { $(c).toBlob(b => window.open(URL.createObjectURL(b), '_blank')); }
 
+// ---------- dati catastali riservati: file cifrato AES-256-GCM, chiave per comune ----------
+let R = false;
+async function unlock(k) {
+  const e = await fetch(`data/riservato_${C}_${Y}.json`).then(r => r.json()), b = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(k.trim()), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({name:'PBKDF2', salt:b(e.salt), iterations:e.iter, hash:'SHA-256'}, km, {name:'AES-GCM', length:256}, false, ['decrypt']);
+  const par = JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM', iv:b(e.iv)}, key, b(e.ct))));
+  A.forEach(p => p.particelle = par[p.id] || []); R = true; printable();
+  try { sessionStorage.setItem('k_' + C, k.trim()); } catch (_) {}
+}
+async function tryUnlock() { $('kMsg').textContent = 'Verifico…';
+  try { await unlock($('kIn').value); if (sel) show(sel, false); } catch (_) { $('kMsg').textContent = 'Chiave non valida.'; } }
+function ask(then) { const k = prompt('Chiave di accesso ai dati catastali del Comune'); if (k) unlock(k).then(then).catch(() => alert('Chiave non valida.')); }
+const lockBox = () => `<div class="sub">Riservate all'amministrazione comunale. Inserisci la chiave di accesso.</div>
+  <div class="btns"><input id="kIn" type="password" autocomplete="off" placeholder="chiave di accesso" onkeydown="event.key=='Enter'&&tryUnlock()" style="flex:2;background:#1a1b1f;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px;font:inherit;font-size:12px"><button onclick="tryUnlock()">Sblocca</button></div><div class="note" id="kMsg"></div>`;
+
 // ---------- documenti ----------
 function rows() {
   const r = [['area', 'priorita', 'data_inizio', 'data_fine', 'ettari_area', 'gravita', 'bosco_pascolo_pct', 'vincolo', 'affidabilita', 'codice_comune', 'foglio', 'particella', 'edificazione_vietata_fino', 'destinazione_immutabile_fino']];
@@ -357,7 +374,8 @@ function rows() {
   return r;
 }
 function dl(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); }
-$('bCsv').onclick = () => dl(`catasto_incendi_${C}_${Y}.csv`, '﻿' + rows().map(r => r.join(';')).join('\n'), 'text/csv');
+$('bCsv').onclick = () => R ? csv() : ask(csv);
+const csv = () => dl(`catasto_incendi_${C}_${Y}.csv`, '﻿' + rows().map(r => r.join(';')).join('\n'), 'text/csv');
 $('bGeo').onclick = () => dl(`aree_percorse_${C}_${Y}.geojson`, JSON.stringify({type:'FeatureCollection', features:D.features.map(f => ({...f, properties:{...f.properties, E:undefined}}))}), 'application/geo+json');
 function printable() {
   $('print').innerHTML = `<h1>Comune di ${D.comune} — Aree percorse dal fuoco ${D.anno} (bozza)</h1>
