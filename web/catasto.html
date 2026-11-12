@@ -46,12 +46,18 @@ a{color:var(--hot)}details{margin-top:10px;color:var(--mut);font-size:12px}summa
 #vw button{background:#2a2c31;color:var(--txt);border:0;border-radius:6px;padding:6px 10px;cursor:pointer;font:inherit;font-size:12px}#vw button:hover{background:#3a3c42}
 #vst{color:var(--mut);font-size:12px}
 #print{display:none}
+.banner{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(255,209,102,.95);color:#1a1a1a;font-size:12px;font-weight:600;padding:5px 12px;border-radius:16px;white-space:nowrap;pointer-events:none}
+.src{list-style:none;margin:0;padding:0}.src li{padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}.src li b{color:var(--txt)}.src a{text-decoration:none;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.chips span{background:#2a2c31;border-radius:9px;padding:1px 7px;font-size:11px;color:var(--txt)}
+.bib{font-size:11px;color:var(--mut);margin:6px 0 0;padding-left:18px}.bib li{margin-bottom:3px}
+@media(max-width:1100px){.banner{top:auto;bottom:24px;white-space:normal;text-align:center;width:max-content;max-width:80vw}}
 @media(max-width:700px){#side{bottom:auto;right:16px;width:auto;max-height:50vh}#card{left:8px;right:8px;top:30vh;bottom:8px;width:auto}}
 @media print{#map,#side,#card,#vw{display:none!important}body{background:#fff;color:#000;font-size:11px}#print{display:block;padding:10mm}#print td,#print th{border:1px solid #999;padding:3px 5px;text-align:left}#print h1{font-size:16px}}
 </style>
 </head>
 <body>
 <div id="map"></div>
+<div class="banner">Elaborazione sperimentale da dati satellitari · non è il catasto ufficiale del Comune</div>
 <div id="side" class="panel">
   <h1>Fire Tracker <span>Sicilia</span></h1>
   <nav><a href="./">Evento 2023</a><a href="storico.html">Storico</a><a href="rischio.html">Rischio</a><a class="on" href="catasto.html">Dopo l'incendio</a></nav>
@@ -66,6 +72,7 @@ a{color:var(--hot)}details{margin-top:10px;color:var(--mut);font-size:12px}summa
     <h2>Quando ha bruciato (ettari per mese)</h2><canvas class="ch" id="chM" height="90"></canvas>
     <h2>Cosa ha bruciato</h2><div class="bar" id="lcBar"></div><div class="legend" id="lcLeg"></div>
     <h2>Rilevamenti satellitari nel comune, 2001–2025</h2><canvas class="ch" id="chY" height="80"></canvas><div class="note" id="yNote"></div>
+    <div id="pressBox" hidden><h2>I giorni del fuoco, secondo i giornali</h2><ol class="src" id="press"></ol></div>
     <h2>Documenti</h2>
     <div class="btns"><button id="bCsv">Elenco particelle (CSV)</button><button id="bGeo">Perimetri (GeoJSON)</button><button onclick="print()">Stampa per l'albo</button></div>
   </div>
@@ -144,7 +151,11 @@ const map = new maplibregl.Map({container:'map', center:[13.2, 37.95], zoom:10.5
   layers:[{id:'sat', type:'raster', source:'sat', paint:{'raster-brightness-max':.6, 'raster-saturation':-.5}}]}});
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 new ResizeObserver(() => map.resize()).observe($('map'));
-let D, I = {}, A = [], sel = null;
+let D, I = {}, A = [], S = [], sel = null;
+const FATTI = {mezzi_aerei:'mezzi aerei', evacuati:'evacuati', case:'edifici danneggiati', edifici:'edifici danneggiati', feriti:'feriti', vittime:'vittime', squadre:'squadre a terra', strade:'strade chiuse', ettari:'ettari dichiarati', cause:'cause'};
+const chips = f => Object.entries(f || {}).filter(([, v]) => v).map(([k, v]) => `<span>${FATTI[k] || k.replace(/_/g, ' ')}: ${v}</span>`).join('');
+const art = a => `<li><b>${dt(a.data)} · ${a.testata}</b> — ${a.sintesi} <a href="${a.url}" target="_blank" rel="noopener noreferrer" title="${a.titolo}">[${a.n}]</a>${a.match == 'probabile' ? ' <span class="sub">(corrispondenza probabile)</span>' : ''}<div class="chips">${chips(a.fatti)}</div></li>`;
+const bib = L => `<ol class="bib">${L.map(a => `<li value="${a.n}">${a.testata}, «${a.titolo}», ${dt(a.data)}. <a href="${a.url}" target="_blank" rel="noopener noreferrer">link</a></li>`).join('')}</ol>`;
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x == b));
   ['tD', 'tA', 'tM'].forEach(t => $(t).hidden = t != b.dataset.t); });
@@ -173,7 +184,8 @@ function est(p, im) {
 }
 
 Promise.all([fetch(`data/catasto_${C}_${Y}.json`).then(r => r.json()), fetch(`data/impatto_${C}_${Y}.json`).then(r => r.ok ? r.json() : {aree:{}}).catch(() => ({aree:{}})),
-  fetch('data/history.json').then(r => r.json())]).then(([d, im, h]) => {
+  fetch('data/history.json').then(r => r.json()), fetch(`data/stampa_${C}_${Y}.json`).then(r => r.ok ? r.json() : []).catch(() => [])]).then(([d, im, h, st]) => {
+  S = clean(st).filter(a => /^https:\/\//.test(a.url)).sort((a, b) => a.data < b.data ? -1 : 1); S.forEach((a, i) => a.n = i + 1);
   d.features.forEach(f => f.properties = clean(f.properties)); d.comune = esc(d.comune); h.comuni.forEach(c => c[0] = esc(c[0]));
   D = d; I = clean(im.aree);
   D.features.forEach(f => { f.properties.E = est(f.properties, I[f.properties.id]); });
@@ -184,6 +196,7 @@ Promise.all([fetch(`data/catasto_${C}_${Y}.json`).then(r => r.json()), fetch(`da
   document.title = `Dopo l'Incendio — ${d.comune} ${d.anno}`;
   $('head').innerHTML = `<b style="color:var(--txt);font-size:15px">${d.comune} · ${d.anno}</b> — cosa ha bruciato, che danni ha fatto, cosa fare ora`;
   dashboard(h);
+  if (S.length) { $('pressBox').hidden = false; $('press').innerHTML = S.map(art).join('') + `<li style="border:0"><span class="sub">Fonti</span>${bib(S)}</li>`; }
   $('mTh').textContent = d.metodo.soglia_dnbr; $('mD').textContent = d.metodo.dist_focolaio_m; $('mA').textContent = fmt(d.metodo.area_min_ha, 1);
   $('pTab').innerHTML = Object.entries(PAR).map(([k, p]) => `<tr><td>${p.u}<br><span style="color:var(--mut)">${p.f}</span></td><td>${p.v ? (Array.isArray(p.v) ? p.v.map(x => fmt(x)).join('–') : fmt(p.v, 1)) : 'per classe'}<br><span class="tag ${p.a == 'alta' ? 'pB' : p.a == 'media' ? 'pM' : 'pA'}">${p.a}</span></td></tr>`).join('');
   $('onlyV').onchange = $('onlyP').onchange = list; list(); printable();
@@ -291,6 +304,7 @@ function show(id, fly) {
     <div class="sub">${p.dal == p.al ? dt(p.dal) : dt(p.dal) + ' – ' + dt(p.al)} · ${fmt(p.ha, 1)} ha · gravità ${p.gravita}</div>
     <button class="big" onclick="viewer(${p.id})">Guarda prima e dopo (immagini satellitari)</button>
     <h2>Cosa è successo</h2><div class="story">${story}</div>
+    ${(() => { const L = S.filter(a => (a.aree || []).includes(p.id)); return L.length ? `<h2>Cosa hanno riportato i giornali</h2><ol class="src">${L.map(art).join('')}</ol>${bib(L)}` : ''; })()}
     <h2>Rischi</h2><div class="risk">${risk || '<span class="sub">dati di impatto non disponibili</span>'}</div>
     <h2>Interventi proposti</h2><table>${E.iv.map(x => `<tr><td>${x.t}<br><span class="sub">${x.q} · ${x.w}</span></td><td>${x.c ? (x.c[1] ? eur(x.c) : 'atto amministrativo') : 'da sopralluogo'}</td></tr>`).join('')}
       <tr><td><b>Totale stimato</b></td><td><b>${E.costo[1] ? eur(E.costo) : '—'}</b></td></tr></table>
@@ -341,6 +355,8 @@ async function draw(k) {
     c.strokeStyle = '#00e5ff'; c.lineWidth = Math.max(1.5, W / 700); c.setLineDash([6, 4]);
     const g = V.f.geometry; (g.type == 'Polygon' ? [g.coordinates] : g.coordinates).forEach(pol => pol.forEach(ring => { c.beginPath();
       ring.forEach((pt, i) => { const [x, y] = proj4('EPSG:4326', UTM, pt); const px = (x - x0) / (x1 - x0) * W, py = (y1 - y) / (y1 - y0) * H; i ? c.lineTo(px, py) : c.moveTo(px, py); }); c.stroke(); }));
+    c.setLineDash([]); c.font = `${Math.max(11, W / 70)}px system-ui`; const tx = `Sentinel-2 · ${dt(it.properties.datetime.slice(0, 10))} · Fire Tracker Sicilia · elaborazione sperimentale`;
+    c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(0, H - Math.max(11, W / 70) * 1.8, c.measureText(tx).width + 16, Math.max(11, W / 70) * 1.8); c.fillStyle = '#fff'; c.fillText(tx, 8, H - Math.max(11, W / 70) * .55);
     $('vst').textContent = `${W}×${H} px · ${fmt((x1 - x0) / 1000, 1)}×${fmt((y1 - y0) / 1000, 1)} km`;
     const z = Math.min(cmp.clientWidth / W, cmp.clientHeight / H); cv.style.width = W * z + 'px'; cv.style.height = H * z + 'px';
     if (k == 'post') { const r = cv.getBoundingClientRect(); slide({clientX: r.left + r.width / 2}); }
@@ -376,12 +392,13 @@ function rows() {
   return r;
 }
 function dl(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); }
+const AVV = 'BOZZA SPERIMENTALE da dati satellitari (Sentinel-2, NASA FIRMS) - non è il catasto ufficiale del Comune - da validare con i rilievi del Corpo Forestale';
 $('bCsv').onclick = () => R ? csv() : ask(csv);
-const csv = () => dl(`catasto_incendi_${C}_${Y}.csv`, '﻿' + rows().map(r => r.join(';')).join('\n'), 'text/csv');
-$('bGeo').onclick = () => dl(`aree_percorse_${C}_${Y}.geojson`, JSON.stringify({type:'FeatureCollection', features:D.features.map(f => ({...f, properties:{...f.properties, E:undefined}}))}), 'application/geo+json');
+const csv = () => dl(`catasto_incendi_${C}_${Y}.csv`, '﻿' + AVV + '\n' + rows().map(r => r.join(';')).join('\n'), 'text/csv');
+$('bGeo').onclick = () => dl(`aree_percorse_${C}_${Y}.geojson`, JSON.stringify({type:'FeatureCollection', avviso:AVV, features:D.features.map(f => ({...f, properties:{...f.properties, E:undefined}}))}), 'application/geo+json');
 function printable() {
   $('print').innerHTML = `<h1>Comune di ${D.comune} — Aree percorse dal fuoco ${D.anno} (bozza)</h1>
-    <p>Elaborazione automatica da immagini satellitari Sentinel-2 e NASA FIRMS, ai sensi dell'art. 10 L. 353/2000. Da validare con i rilievi del Corpo Forestale. Aree: ${A.length}, ettari: ${fmt(A.reduce((s, p) => s + p.ha, 0), 1)}.</p>
+    <p><b>${AVV}.</b> Elaborazione automatica ai sensi dell'art. 10 L. 353/2000. Aree: ${A.length}, ettari: ${fmt(A.reduce((s, p) => s + p.ha, 0), 1)}.</p>
     <table><tr><th>Area</th><th>Data</th><th>Ettari</th><th>Bosco/pascolo</th><th>Vincolo</th><th>Particelle (foglio: particelle)</th></tr>
     ${A.map(p => { const fo = {}; (p.particelle || []).forEach(([, fg, pa]) => (fo[fg] = fo[fg] || []).push(pa));
       return `<tr><td>${p.id}</td><td>${dt(p.dal)}</td><td>${fmt(p.ha, 1)}</td><td>${Math.round(p.bosco_pascolo * 100)}%</td><td>${p.vincolo ? 'sì, fino al ' + plus(p.dal, 15) : 'da valutare'}</td><td>${Object.entries(fo).map(([f, ps]) => `F.${f}: ${ps.join(', ')}`).join('; ')}</td></tr>`; }).join('')}</table>`;

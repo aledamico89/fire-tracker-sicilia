@@ -42,6 +42,7 @@ Variabili più importanti: storico del comune, periodo dell'anno, temperatura ma
 ## Dopo l'incendio (`catasto.html`) — pilota Monreale 2023
 **Panoramica del comune:** ettari bruciati, quota di territorio, edifici e strade esposti, versanti a rischio di erosione, CO₂, danno stimato e costo degli interventi, cosa deve fare il Comune, aree in ordine di priorità.
 **Scheda di ogni area:** resoconto scritto (cosa è bruciato, gravità, pendenze, case, strade, Natura 2000), interventi proposti con tempi e costi, vincoli, particelle. **Visore prima/dopo** Sentinel-2 a 10 m: il browser scarica solo il riquadro dell'area dai file Cloud-Optimized GeoTIFF su AWS, senza ospitare immagini nel repository; download PNG.
+**Rassegna stampa:** per i principali eventi, una frase di sintesi con parole nostre, i fatti riportati (evacuati, mezzi, strade chiuse) e il link alla fonte, numerati come una bibliografia. Gli articoli sono abbinati a un'area solo se data e località coincidono.
 **Dati catastali riservati:** le particelle sono in un file cifrato (AES-256-GCM, chiave derivata con PBKDF2-SHA256), sbloccabile nella pagina solo con la chiave consegnata al Comune; la decifratura avviene nel browser, senza server.
 Le stime di costo sono ordini di grandezza con parametri, fonti e affidabilità dichiarati nella pagina (scheda "Metodo e fonti").
 
@@ -57,6 +58,8 @@ python3 scripts/burned.py Monreale 2023
 python3 scripts/parcels.py web/data/catasto_monreale_2023.json
 python3 scripts/riservato.py monreale 2023    # cifra le particelle (chiave in .secrets/, fuori da git)
 python3 scripts/impact.py monreale 2023      # pendenze, edifici, strade, Natura 2000
+python3 scripts/localita.py monreale 2023    # località OSM vicine a ogni area
+python3 scripts/stampa.py monreale 2023      # rassegna stampa curata: verifica link, abbina articoli e aree
 ```
 
 ## Rigenerare i dati
