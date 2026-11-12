@@ -27,7 +27,16 @@ a{color:var(--hot)}
 #hist{position:absolute;inset:0 0 18px 0;width:100%;height:38px}
 #slider{position:absolute;left:0;right:0;bottom:0;width:100%;margin:0;accent-color:var(--fire)}
 #clock{font-variant-numeric:tabular-nums;min-width:150px;text-align:right}#clock small{display:block;color:var(--mut)}
-@media(max-width:640px){#side{left:16px;right:16px;width:auto;top:16px;padding:10px 12px}.stats{grid-template-columns:repeat(4,1fr)}.stat b{font-size:16px}.layers,.legend,details{display:none}#clock{min-width:0}}
+#ana{top:16px;right:56px;width:300px;max-height:calc(100vh - 130px);overflow:auto}
+.card{border-top:1px solid var(--line);padding:12px 0}.card:first-child{border:0;padding-top:0}.card:last-child{padding-bottom:0}
+.card h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 4px;font-weight:600}
+.big{font-size:26px;font-weight:600;font-variant-numeric:tabular-nums}.card small{color:var(--mut)}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#000;margin-left:8px;vertical-align:middle}
+.note{color:var(--mut);font-size:11px;margin:6px 0 0}
+canvas.spark{width:100%;height:44px;display:block;margin-top:6px}
+#aL{list-style:none;margin:6px 0 0;padding:0;font-size:13px}#aL li{display:flex;justify-content:space-between;padding:2px 0}#aL b{font-variant-numeric:tabular-nums;color:var(--hot)}
+@media(max-width:640px){#side{left:16px;right:16px;width:auto;top:16px;padding:10px 12px}.stats{grid-template-columns:repeat(4,1fr)}.stat b{font-size:16px}.layers,.legend,details{display:none}#clock{min-width:0}
+#ana{left:16px;right:16px;width:auto;top:auto;bottom:88px;max-height:30vh}}
 </style>
 </head>
 <body>
@@ -44,15 +53,30 @@ a{color:var(--hot)}
   <div class="layers">
     <label><input type="checkbox" id="lFire" checked> Focolai satellitari</label>
     <label><input type="checkbox" id="lWind" checked> Vento (10 m)</label>
+    <label><input type="checkbox" id="lAir" checked> Qualità dell'aria (PM10)</label>
+    <label><input type="checkbox" id="lFwi"> Pericolo incendi (FWI)</label>
     <label><input type="checkbox" id="l3d" checked> Terreno 3D</label>
   </div>
   <div class="legend">ora<i></i>12 h+</div>
   <details><summary>Metodo e limiti</summary>
     <p>Focolai: rilevazioni satellitari NASA FIRMS (MODIS 1 km, VIIRS 375 m), 6–8 passaggi al giorno; confidenza bassa esclusa. Un punto è un pixel caldo, non un perimetro: fumo e nuvole possono nascondere il fuoco.</p>
     <p>Meteo: rianalisi ERA5 via Open-Meteo, griglia 0,5°, oraria. Valori indicativi, non misure di stazione.</p>
+    <p>Pericolo: Fire Weather Index canadese (Van Wagner 1987) calcolato a mezzogiorno, con i codici di umidità del combustibile accumulati dal 1° aprile. Classi EFFIS.</p>
+    <p>Aria: modello Copernicus CAMS, non misure di centralina. Comuni: confini openpolis/ISTAT, popolazione OpenStreetMap.</p>
     <p>Prototipo di ricerca, non è un sistema di allerta.</p>
-    <p>Fonti: <a href="https://firms.modaps.eosdis.nasa.gov">NASA FIRMS</a> · <a href="https://open-meteo.com">Open-Meteo</a> · Copernicus ERA5 · Terreno: Mapzen/AWS · Immagini: <a href="https://s2maps.eu">Sentinel-2 cloudless by EOX</a> (CC BY-NC-SA 4.0)</p>
+    <p>Fonti: <a href="https://firms.modaps.eosdis.nasa.gov">NASA FIRMS</a> · <a href="https://open-meteo.com">Open-Meteo</a> · Copernicus ERA5 e CAMS · <a href="https://github.com/openpolis/geojson-italy">openpolis</a> · © OpenStreetMap ·Terreno: Mapzen/AWS · Immagini: <a href="https://s2maps.eu">Sentinel-2 cloudless by EOX</a> (CC BY-NC-SA 4.0)</p>
   </details>
+</div>
+<div id="ana" class="panel">
+  <div class="card"><h2>Pericolo incendi · Palermo</h2><span class="big" id="aF">–</span><span class="tag" id="aFc"></span>
+    <canvas class="spark" id="cF"></canvas>
+    <p class="note">Fire Weather Index giornaliero. Sopra 38 il pericolo è molto alto, sopra 50 estremo (scala EFFIS).</p></div>
+  <div class="card"><h2>Qualità dell'aria · Palermo</h2><span class="big" id="aP">–</span> <small>µg/m³ PM10</small><span class="tag" id="aPc"></span>
+    <canvas class="spark" id="cP"></canvas>
+    <p class="note">Tratteggio: limite UE giornaliero (50 µg/m³).</p></div>
+  <div class="card"><h2>Comuni colpiti</h2><span class="big" id="aC">0</span> <small id="aCp"></small>
+    <ul id="aL"></ul>
+    <p class="note">Comuni con almeno un focolaio rilevato. La popolazione è quella residente, non le persone evacuate.</p></div>
 </div>
 <div id="bar" class="panel">
   <button id="play" aria-label="Play">▶</button>
@@ -92,8 +116,23 @@ function arrowIcon() {
 Promise.all([
   fetch('data/hotspots.json').then(r => r.json()),
   fetch('data/weather.json').then(r => r.json()),
+  fetch('data/analysis.json').then(r => r.json()),
   new Promise(r => map.on('load', r))
-]).then(([hot, wx]) => {
+]).then(([hot, wx, an]) => {
+  const FWI_C = [[5.2,'Molto basso','#4caf50'],[11.2,'Basso','#cddc39'],[21.3,'Moderato','#ffc107'],[38,'Alto','#ff7043'],[50,'Molto alto','#d32f2f'],[1e9,'Estremo','#b04bd6']];
+  const PM_C = [[20,'Buona','#50f0e6'],[40,'Discreta','#50ccaa'],[50,'Moderata','#f0e641'],[100,'Scadente','#ff5050'],[150,'Pessima','#c0304a'],[1e9,'Molto pessima','#9d3bb0']];
+  const band = (C, v) => C.find(c => v < c[0]);
+  const palAir = an.air.find(a => a.name === 'Palermo');
+  function spark(cv, vals, cur, color, opt = {}) {
+    const w = cv.clientWidth, h = cv.clientHeight, g = cv.getContext('2d'), m = opt.max || Math.max(...vals), n = vals.length;
+    cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio; g.scale(devicePixelRatio, devicePixelRatio);
+    const y = v => h - 2 - Math.min(v || 0, m) / m * (h - 4);
+    if (opt.bars) { const bw = w / n; vals.forEach((v, i) => { g.globalAlpha = i === cur ? 1 : .4; g.fillStyle = color(v); g.fillRect(i * bw + 2, y(v), bw - 4, h - y(v)); }); }
+    else { const x = i => i / (n - 1) * w; g.strokeStyle = '#e9e6e1'; g.lineWidth = 1.5; g.beginPath(); vals.forEach((v, i) => g[i ? 'lineTo' : 'moveTo'](x(i), y(v))); g.stroke();
+      g.fillStyle = color(vals[cur]); g.beginPath(); g.arc(x(cur), y(vals[cur]), 4, 0, 7); g.fill(); }
+    if (opt.ref) { g.globalAlpha = 1; g.strokeStyle = '#ff5050'; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, y(opt.ref)); g.lineTo(w, y(opt.ref)); g.stroke(); g.setLineDash([]); }
+    g.globalAlpha = 1;
+  }
   const t0 = wx.t0, t1 = t0 + (wx.points[0].ws.length - 1) * wx.step;
   const slider = $('slider'); slider.min = t0; slider.max = t1;
   let t = Date.UTC(2023, 6, 24, 10) / 1000; // 24 luglio, mattina
@@ -103,6 +142,15 @@ Promise.all([
   map.addImage('arrow', arrowIcon(), {sdf:true});
   map.addSource('fire', {type:'geojson', data:{type:'FeatureCollection', features:[]}});
   map.addSource('wind', {type:'geojson', data:{type:'FeatureCollection', features:[]}});
+  map.addSource('fwi', {type:'geojson', data:{type:'FeatureCollection', features: wx.points.map((p, k) => ({type:'Feature', id:k, properties:{},
+    geometry:{type:'Polygon', coordinates:[[[p.lon-.25,p.lat-.25],[p.lon+.25,p.lat-.25],[p.lon+.25,p.lat+.25],[p.lon-.25,p.lat+.25],[p.lon-.25,p.lat-.25]]]}}))}});
+  map.addLayer({id:'fwi', type:'fill', source:'fwi', layout:{visibility:'none'}, paint:{'fill-color':['coalesce',['feature-state','c'],'#000'], 'fill-opacity':.35}});
+  map.addSource('air', {type:'geojson', data:{type:'FeatureCollection', features:[]}});
+  map.addLayer({id:'air', type:'circle', source:'air', paint:{'circle-radius':['interpolate',['linear'],['zoom'],7,7,11,14],
+    'circle-color':['get','c'], 'circle-opacity':.85, 'circle-stroke-color':'#000', 'circle-stroke-width':1.5}});
+  const pop = new maplibregl.Popup({closeButton:false, offset:12});
+  map.on('mousemove', 'air', e => { const p = e.features[0].properties; pop.setLngLat(e.lngLat).setHTML(`<b>${p.name}</b><br>PM10 ${p.v} µg/m³`).addTo(map); });
+  map.on('mouseleave', 'air', () => pop.remove());
   map.addLayer({id:'wind', type:'symbol', source:'wind', layout:{
     'icon-image':'arrow', 'icon-rotate':['get','rot'], 'icon-rotation-alignment':'map', 'icon-allow-overlap':true,
     'icon-size':['interpolate',['linear'],['get','ws'],0,.35,40,1.1]},
@@ -132,7 +180,7 @@ Promise.all([
     for (let d = t0; d <= t1; d += 86400) g.fillText(new Date(d * 1000).toLocaleDateString('it-IT', {day:'2-digit', month:'short', timeZone:'Europe/Rome'}), (d - t0) / (t1 - t0) * w + 2, 10);
   }
 
-  let lastHour = -1;
+  let lastHour = -1, lastSeen = -1;
   function render() {
     const i = Math.max(0, Math.min(wx.points[0].ws.length - 1, Math.floor((t - t0) / wx.step)));
     map.getSource('fire').setData(fireData());
@@ -140,6 +188,24 @@ Promise.all([
       lastHour = i; map.getSource('wind').setData(windData(i));
       $('sT').textContent = Math.round(Math.max(...wx.points.map(p => p.t[i]))) + '°';
       $('sW').textContent = Math.round(pal.ws[i]) + ' km/h';
+      const d = Math.min(an.days.length - 1, Math.floor(i / 24)), palI = wx.points.indexOf(pal), fv = an.fwi[palI][d], fc = band(FWI_C, fv);
+      an.fwi.forEach((f, k) => map.setFeatureState({source:'fwi', id:k}, {c: band(FWI_C, f[d])[2]}));
+      $('aF').textContent = Math.round(fv); $('aFc').textContent = fc[1]; $('aFc').style.background = fc[2];
+      spark($('cF'), an.fwi[palI], d, v => band(FWI_C, v)[2], {bars:true, max:70});
+      map.getSource('air').setData({type:'FeatureCollection', features: an.air.map(a => { const v = Math.round(a[ 'pm10' ][i] || 0);
+        return {type:'Feature', geometry:{type:'Point', coordinates:[a.lon, a.lat]}, properties:{name:a.name, v, c:band(PM_C, v)[2]}}; })});
+      const pv = Math.round(palAir.pm10[i] || 0), pc = band(PM_C, pv);
+      $('aP').textContent = pv; $('aPc').textContent = pc[1]; $('aPc').style.background = pc[2];
+      spark($('cP'), palAir.pm10, i, v => band(PM_C, v || 0)[2], {ref:50, max:100});
+    }
+    const cnt = {}; let seen = 0;
+    hot.forEach((p, k) => { if (p[2] <= t) { seen++; const c = an.hc[k]; if (c >= 0) cnt[c] = (cnt[c] || 0) + 1; } });
+    if (seen !== lastSeen) {
+      lastSeen = seen; const ids = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]);
+      $('aC').textContent = ids.length;
+      const res = ids.reduce((s, c) => s + (an.comuni[c][2] || 0), 0);
+      $('aCp').textContent = !ids.length ? '' : res >= 1e6 ? (res / 1e6).toLocaleString('it-IT', {maximumFractionDigits:1}) + ' milioni di residenti' : Math.round(res / 1000) + ' mila residenti';
+      $('aL').innerHTML = ids.slice(0, 5).map(c => `<li><span>${an.comuni[c][0]} <small>${an.comuni[c][1]}</small></span><b>${cnt[c]}</b></li>`).join('');
     }
     $('sAct').textContent = hot.filter(p => p[2] <= t && t - p[2] < 43200).length;
     $('sTot').textContent = hot.filter(p => p[2] <= t).length;
@@ -160,7 +226,8 @@ Promise.all([
   slider.oninput = () => { t = +slider.value; render(); };
   cv.onclick = e => { t = t0 + e.offsetX / cv.clientWidth * (t1 - t0); render(); };
   $('lFire').onchange = e => ['fire','glow'].forEach(l => map.setLayoutProperty(l, 'visibility', e.target.checked ? 'visible' : 'none'));
-  $('lWind').onchange = e => map.setLayoutProperty('wind', 'visibility', e.target.checked ? 'visible' : 'none');
+  ['Wind', 'Air', 'Fwi'].forEach(n => $('l' + n).onchange = e => map.setLayoutProperty(n.toLowerCase(), 'visibility', e.target.checked ? 'visible' : 'none'));
+  addEventListener('resize', () => { lastHour = -1; render(); });
   $('l3d').onchange = e => { map.setTerrain(e.target.checked ? {source:'dem', exaggeration:1.4} : null); map.easeTo({pitch: e.target.checked ? 55 : 0}); };
   addEventListener('resize', drawHist);
   render();
