@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Storico Incendi Sicilia</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+:root{--bg:#0e0f11;--panel:rgba(18,19,22,.9);--line:#2a2c31;--txt:#e9e6e1;--mut:#8d8a85;--fire:#ff6a00;--hot:#ffd166}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,-apple-system,sans-serif}
+#map{position:fixed;inset:0}
+.panel{position:fixed;background:var(--panel);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow:auto}
+#side{top:16px;left:16px;bottom:16px;width:320px}#card{top:16px;right:56px;width:320px;max-height:calc(100vh - 32px);display:none}
+h1{font-size:16px;margin:0 0 2px}h1 span{color:var(--fire)}nav{font-size:12px;margin-bottom:12px}nav a{color:var(--mut);text-decoration:none;margin-right:10px}nav a.on{color:var(--txt);border-bottom:2px solid var(--fire)}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:14px 0 6px;font-weight:600}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}.stat small{color:var(--mut);font-size:11px}
+canvas.ch{width:100%;height:70px;display:block}
+.note{color:var(--mut);font-size:11px;margin:4px 0 0}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:12px}.seg button{flex:1;background:none;border:0;color:var(--mut);padding:6px;cursor:pointer;font:inherit;font-size:12px}.seg button.on{background:#2a2c31;color:var(--txt)}
+#top{list-style:none;margin:0;padding:0}#top li{display:flex;justify-content:space-between;padding:3px 0;cursor:pointer}#top li:hover{color:var(--hot)}#top b,.kv b{font-variant-numeric:tabular-nums;color:var(--hot)}
+.legend{display:flex;gap:2px;align-items:center;font-size:11px;color:var(--mut);margin-top:8px}.legend i{width:22px;height:8px;border-radius:2px}
+#card h3{font-size:20px;margin:0}#card .sub{color:var(--mut);font-size:12px;margin-bottom:10px}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:10px}.kv div small{display:block;color:var(--mut);font-size:11px}.kv b{font-size:20px}
+.btns{display:flex;gap:8px;margin-top:12px}.btns button{flex:1;background:#2a2c31;color:var(--txt);border:0;border-radius:8px;padding:8px;cursor:pointer;font:inherit;font-size:12px}
+details{margin-top:12px;color:var(--mut);font-size:12px}summary{cursor:pointer;color:var(--txt)}a{color:var(--hot)}
+@media(max-width:640px){#side{bottom:auto;right:16px;width:auto;max-height:45vh}#card{left:16px;right:16px;top:auto;bottom:16px;width:auto;max-height:50vh}}
+@media print{body{background:#fff;color:#000}#map,#side,.btns{display:none!important}#card{position:static;display:block!important;width:100%;max-height:none;border:0;background:#fff;color:#000;backdrop-filter:none}#card .sub,.kv div small,.note{color:#444}.kv b{color:#000}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="side" class="panel">
+  <h1>Fire Tracker <span>Sicilia</span></h1>
+  <nav><a href="./">Evento luglio 2023</a><a class="on" href="storico.html">Storico 2001–2025</a></nav>
+  <div class="stats">
+    <div class="stat"><b id="sDet">–</b><small>rilevazioni</small></div>
+    <div class="stat"><b id="sIgn">–</b><small>inneschi stimati</small></div>
+    <div class="stat"><b id="sRec">–</b><small>aree di ~1 km² bruciate in ≥5 anni</small></div>
+  </div>
+  <div class="seg"><button id="vCells" class="on">Dove brucia sempre</button><button id="vCom">Per comune</button></div>
+  <div class="legend" id="leg"></div>
+  <h2>Inneschi per anno</h2><canvas class="ch" id="cYear"></canvas>
+  <h2>Per mese</h2><canvas class="ch" id="cMonth"></canvas>
+  <h2>Per giorno della settimana</h2><canvas class="ch" id="cWday"></canvas>
+  <p class="note" id="wNote"></p>
+  <h2>Comuni con più inneschi</h2><ul id="top"></ul>
+  <details><summary>Metodo e limiti</summary>
+    <p>Fonte: NASA FIRMS, sensore MODIS (pixel 1 km), unica serie omogenea dal 2001. Esclusi vulcano (Etna), fonti industriali fisse, mare e rilevazioni a bassa confidenza.</p>
+    <p>Una rilevazione è un pixel caldo durante un passaggio del satellite (4 al giorno): misura quanto e dove brucia, non l'area bruciata in ettari. Incendi piccoli o brevi possono sfuggire.</p>
+    <p>Innesco stimato: rilevazione senza altri focolai entro circa 2 km nei 3 giorni precedenti. È un'approssimazione: non distingue cause naturali, colpose o dolose, e include bruciature agricole.</p>
+    <p>Confini comunali: openpolis/ISTAT (CC BY 4.0). Popolazione: © OpenStreetMap (ODbL).</p>
+  </details>
+</div>
+<div id="card" class="panel">
+  <h3 id="cName"></h3><div class="sub" id="cSub"></div>
+  <div class="kv">
+    <div><b id="kIgn"></b><small>inneschi stimati 2001–2025</small></div>
+    <div><b id="kYrs"></b><small>anni con incendi su 25</small></div>
+    <div><b id="kLast"></b><small>ultimo anno con incendi</small></div>
+    <div><b id="kRank"></b><small>posizione in Sicilia (inneschi)</small></div>
+  </div>
+  <h2>Rilevazioni per anno</h2><canvas class="ch" id="cCom"></canvas>
+  <p class="note">Dati satellitari NASA FIRMS MODIS. Stima indicativa, da integrare con il catasto incendi comunale.</p>
+  <div class="btns"><button onclick="print()">Stampa / PDF</button><button id="close">Chiudi</button></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const nf = n => n.toLocaleString('it-IT');
+function bars(cv, vals, labels, hi = -1, color = '#ff6a00') {
+  const w = cv.clientWidth, h = cv.clientHeight, g = cv.getContext('2d'), m = Math.max(...vals, 1), n = vals.length, bw = w / n, lh = 12;
+  cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio; g.scale(devicePixelRatio, devicePixelRatio);
+  g.font = '10px system-ui'; g.textAlign = 'center';
+  vals.forEach((v, i) => { const bh = v / m * (h - lh - 2); g.fillStyle = i === hi ? '#ffd166' : color; g.globalAlpha = hi < 0 || i === hi ? 1 : .6;
+    g.fillRect(i * bw + 1, h - lh - bh, bw - 2, bh); g.globalAlpha = 1;
+    if (labels[i]) { g.fillStyle = '#8d8a85'; g.fillText(labels[i], i * bw + bw / 2, h - 1); } });
+}
+const map = new maplibregl.Map({container:'map', center:[14.1, 37.55], zoom:7.4, style:{version:8, sources:{
+  sat:{type:'raster', tileSize:256, maxzoom:15, attribution:'Sentinel-2 cloudless 2020 © EOX', tiles:['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg']}},
+  layers:[{id:'sat', type:'raster', source:'sat', paint:{'raster-brightness-max':.55, 'raster-saturation':-.6}}]}});
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+new ResizeObserver(() => map.resize()).observe($('map'));
+
+Promise.all([fetch('data/history.json').then(r => r.json()), fetch('data/comuni.geojson').then(r => r.json()), new Promise(r => map.on('load', r))])
+.then(([H, G]) => {
+  const C = H.comuni, ign = C.map(c => c[4]), rank = [...ign.keys()].sort((a, b) => ign[b] - ign[a]);
+  $('sDet').textContent = nf(H.det.reduce((a, b) => a + b));
+  $('sIgn').textContent = nf(H.ign.reduce((a, b) => a + b));
+  $('sRec').textContent = nf(H.cells.filter(c => c[2] >= 5).length);
+  const yl = H.years.map(y => y % 5 === 0 && y < 2025 ? y : ''), drawAll = () => {
+    bars($('cYear'), H.ign, yl);
+    bars($('cMonth'), H.month, ['G','F','M','A','M','G','L','A','S','O','N','D']);
+    bars($('cWday'), H.wday, ['lun','mar','mer','gio','ven','sab','dom'], -1);
+  };
+  const wk = (H.wday[5] + H.wday[6]) / 2, wd = H.wday.slice(0, 5).reduce((a, b) => a + b) / 5;
+  $('wNote').textContent = `Sabato e domenica: +${Math.round((wk / wd - 1) * 100)}% di inneschi rispetto alla media dei giorni feriali. Il meteo non conosce il calendario: è un indizio di origine umana.`;
+  $('top').innerHTML = rank.slice(0, 10).map(i => `<li data-i="${i}"><span>${C[i][0]} <small style="color:var(--mut)">${C[i][1]}</small></span><b>${nf(C[i][4])}</b></li>`).join('');
+
+  const CELL_C = ['step', ['get','y'], '#6b2a14', 2, '#a3360f', 5, '#ff6a00', 10, '#ffd166'];
+  const COM_C = ['step', ['coalesce', ['feature-state','v'], 0], 'rgba(0,0,0,0)', 1, '#4a2414', 5, '#7a3412', 15, '#b8460b', 40, '#ff6a00', 100, '#ffd166'];
+  map.addSource('com', {type:'geojson', data:G});
+  map.addSource('cells', {type:'geojson', data:{type:'FeatureCollection', features:H.cells.map(c => ({type:'Feature', properties:{y:c[2]}, geometry:{type:'Point', coordinates:[c[0], c[1]]}}))}});
+  map.addLayer({id:'com-fill', type:'fill', source:'com', layout:{visibility:'none'}, paint:{'fill-color':COM_C, 'fill-opacity':.75}});
+  map.addLayer({id:'cells', type:'circle', source:'cells', paint:{'circle-color':CELL_C, 'circle-opacity':['step',['get','y'],.45,2,.75,5,.95],
+    'circle-radius':['interpolate',['exponential',2],['zoom'],7,1.3,10,6,13,48]}});
+  map.addLayer({id:'com-line', type:'line', source:'com', paint:{'line-color':['case',['boolean',['feature-state','sel'],false],'#fff','rgba(255,255,255,.18)'],
+    'line-width':['case',['boolean',['feature-state','sel'],false],2.5,.5]}});
+  map.addLayer({id:'com-hit', type:'fill', source:'com', paint:{'fill-opacity':0}});
+  C.forEach((c, i) => map.setFeatureState({source:'com', id:i}, {v:c[4]}));
+
+  const legend = (items, title) => $('leg').innerHTML = title + items.map(([c, l]) => `<i style="background:${c}" title="${l}"></i>${l}`).join('');
+  const view = cells => {
+    $('vCells').classList.toggle('on', cells); $('vCom').classList.toggle('on', !cells);
+    map.setLayoutProperty('cells', 'visibility', cells ? 'visible' : 'none');
+    map.setLayoutProperty('com-fill', 'visibility', cells ? 'none' : 'visible');
+    cells ? legend([['#6b2a14','1'],['#a3360f','2'],['#ff6a00','5'],['#ffd166','10+']], 'anni con fuoco:&nbsp;')
+          : legend([['#4a2414','1'],['#7a3412','5'],['#b8460b','15'],['#ff6a00','40'],['#ffd166','100+']], 'inneschi:&nbsp;');
+  };
+  $('vCells').onclick = () => view(true); $('vCom').onclick = () => view(false); view(true);
+
+  let sel = -1;
+  function show(i) {
+    if (sel >= 0) map.setFeatureState({source:'com', id:sel}, {sel:false});
+    sel = i; map.setFeatureState({source:'com', id:i}, {sel:true});
+    const c = C[i], yrs = c[3].filter(v => v).length, lastI = c[3].map(v => v > 0).lastIndexOf(true);
+    $('cName').textContent = c[0]; $('cSub').textContent = `Provincia ${c[1]}` + (c[2] ? ` · ${nf(c[2])} residenti` : '');
+    $('kIgn').textContent = nf(c[4]); $('kYrs').textContent = yrs; $('kLast').textContent = lastI >= 0 ? H.years[lastI] : '–';
+    $('kRank').textContent = c[4] ? rank.indexOf(i) + 1 + 'º su ' + C.length : '–';
+    $('card').style.display = 'block'; bars($('cCom'), c[3], yl);
+  }
+  map.on('click', 'com-hit', e => show(e.features[0].id));
+  map.on('mouseenter', 'com-hit', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'com-hit', () => map.getCanvas().style.cursor = '');
+  $('top').onclick = e => { const li = e.target.closest('li'); if (li) show(+li.dataset.i); };
+  $('close').onclick = () => { $('card').style.display = 'none'; if (sel >= 0) map.setFeatureState({source:'com', id:sel}, {sel:false}); sel = -1; };
+  addEventListener('resize', () => { drawAll(); if (sel >= 0) bars($('cCom'), C[sel][3], yl); });
+  drawAll();
+});
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@
 - Risposte brevi, in italiano. Niente riepiloghi di cose già dette, niente elenchi di opzioni scartate.
 - Leggere solo il necessario: `head`/`sed -n`/`grep`, `offset/limit`, `max_chars`. Mai file interi se basta un pezzo.
 - Mai stampare dati grezzi: riassumere con script (conteggi, min/max, prime 3 righe).
-- Dati pesanti in `data/raw/` (lettura vietata): si elaborano solo via script.
+- Dati pesanti in `data/raw/`: mai leggerli direttamente, solo script che stampano riassunti brevi.
 - Un comando Bash concatenato invece di tante chiamate; chiamate indipendenti in parallelo.
 - Edit puntuali, mai riscrivere file interi. Non rileggere file appena scritti.
 - Ricerche ampie / letture web → agente `scout` (Haiku), che restituisce solo la conclusione.

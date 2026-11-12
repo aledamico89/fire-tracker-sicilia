@@ -15,12 +15,19 @@ Prima tappa: **replay degli incendi del 22–28 luglio 2023** (Palermo, 24–25 
 - **Qualità dell'aria:** PM10 orario in 9 città (modello CAMS). Picchi vicino a 90 µg/m³ a Palermo e Messina, limite UE 50.
 - **Comuni colpiti:** comuni con almeno un focolaio e popolazione residente (160 nell'intera settimana).
 
+## Storico 2001–2025 (`storico.html`)
+- 28.793 rilevazioni satellitari MODIS (Etna, impianti industriali e falsi positivi esclusi), circa 15.600 inneschi stimati.
+- **Dove brucia sempre:** 725 aree di circa 1 km² bruciate in almeno 5 anni diversi.
+- **Quando:** stagionalità; nel weekend gli inneschi sono il 12% in più che nei giorni feriali, un indizio di origine umana.
+- **Scheda comune** stampabile in PDF: inneschi, anni con incendi, ultimo anno, posizione in Sicilia. Monreale è prima e ha bruciato in tutti i 25 anni.
+
 ## Rigenerare i dati
 ```bash
 python3 scripts/prepare_data.py
 ```
 ```bash
 python3 scripts/analysis.py
+python3 scripts/history.py
 ```
 Scrivono `web/data/*.json`. Solo libreria standard Python. Il calcolo FWI (`scripts/fwi.py`) riproduce il caso di riferimento di Van Wagner.
 
@@ -30,7 +37,7 @@ python3 -m http.server 8000 -d web
 ```
 
 ## Roadmap
-1. Dashboard storica e live (in corso)
+1. Analisi evento e storico (fatto) · dati live (prossimo)
 2. Modello di rischio giornaliero (baseline: dataset Mesogeos)
 3. Simulatore di propagazione interattivo
 
