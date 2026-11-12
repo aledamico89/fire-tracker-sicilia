@@ -21,6 +21,11 @@ Prima tappa: **replay degli incendi del 22–28 luglio 2023** (Palermo, 24–25 
 - **Quando:** stagionalità; nel weekend gli inneschi sono il 12% in più che nei giorni feriali, un indizio di origine umana.
 - **Scheda comune** stampabile in PDF: inneschi, anni con incendi, ultimo anno, posizione in Sicilia. Monreale è prima e ha bruciato in tutti i 25 anni.
 
+## Rischio previsto (`rischio.html`)
+- **Pericolo meteo:** FWI per ognuno dei 391 comuni, oggi e i 6 giorni successivi, ricalcolato **ogni mattina** in automatico da GitHub Actions (`scripts/forecast.py`).
+- **Priorità:** pericolo meteo + propensione storica del comune. Formula trasparente, spiegata nella pagina.
+- Scheda comune con temperatura, umidità, vento e collegamento alla scheda storica.
+
 ## Rigenerare i dati
 ```bash
 python3 scripts/prepare_data.py
@@ -28,6 +33,7 @@ python3 scripts/prepare_data.py
 ```bash
 python3 scripts/analysis.py
 python3 scripts/history.py
+python3 scripts/forecast.py
 ```
 Scrivono `web/data/*.json`. Solo libreria standard Python. Il calcolo FWI (`scripts/fwi.py`) riproduce il caso di riferimento di Van Wagner.
 
@@ -38,7 +44,7 @@ python3 -m http.server 8000 -d web
 
 ## Roadmap
 1. Analisi evento e storico (fatto) · dati live (prossimo)
-2. Modello di rischio giornaliero (baseline: dataset Mesogeos)
+2. Rischio previsto FWI per comune (fatto) · modello machine learning su Mesogeos (prossimo)
 3. Simulatore di propagazione interattivo
 
 ## Limiti

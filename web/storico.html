@@ -32,7 +32,7 @@ details{margin-top:12px;color:var(--mut);font-size:12px}summary{cursor:pointer;c
 <div id="map"></div>
 <div id="side" class="panel">
   <h1>Fire Tracker <span>Sicilia</span></h1>
-  <nav><a href="./">Evento luglio 2023</a><a class="on" href="storico.html">Storico 2001–2025</a></nav>
+  <nav><a href="./">Evento 2023</a><a class="on" href="storico.html">Storico</a><a href="rischio.html">Rischio previsto</a></nav>
   <div class="stats">
     <div class="stat"><b id="sDet">–</b><small>rilevazioni</small></div>
     <div class="stat"><b id="sIgn">–</b><small>inneschi stimati</small></div>
@@ -135,6 +135,7 @@ Promise.all([fetch('data/history.json').then(r => r.json()), fetch('data/comuni.
   $('close').onclick = () => { $('card').style.display = 'none'; if (sel >= 0) map.setFeatureState({source:'com', id:sel}, {sel:false}); sel = -1; };
   addEventListener('resize', () => { drawAll(); if (sel >= 0) bars($('cCom'), C[sel][3], yl); });
   drawAll();
+  const q = new URLSearchParams(location.search).get('c'); if (q !== null && C[+q]) show(+q);
 });
 </script>
 </body>

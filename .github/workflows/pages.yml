@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * *'  # ogni giorno alle 4 UTC: nuova previsione
 permissions:
   contents: read
   pages: write
@@ -14,6 +16,9 @@ jobs:
     environment: {name: github-pages, url: "${{ steps.d.outputs.page_url }}"}
     steps:
       - uses: actions/checkout@v4
+      - name: Previsione pericolo incendi
+        run: python3 scripts/forecast.py
+        continue-on-error: true
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: {path: web}

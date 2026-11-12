@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rischio Incendi Sicilia</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+:root{--bg:#0e0f11;--panel:rgba(18,19,22,.9);--line:#2a2c31;--txt:#e9e6e1;--mut:#8d8a85;--fire:#ff6a00;--hot:#ffd166}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,-apple-system,sans-serif}
+#map{position:fixed;inset:0}
+.panel{position:fixed;background:var(--panel);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow:auto}
+#side{top:16px;left:16px;bottom:16px;width:320px}#card{top:16px;right:56px;width:320px;max-height:calc(100vh - 32px);display:none}
+h1{font-size:16px;margin:0 0 2px}h1 span{color:var(--fire)}nav{font-size:12px;margin-bottom:10px}nav a{color:var(--mut);text-decoration:none;margin-right:10px}nav a.on{color:var(--txt);border-bottom:2px solid var(--fire)}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:14px 0 6px;font-weight:600}
+.run{color:var(--mut);font-size:12px}
+#days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px}#days button{background:#1c1d21;border:1px solid var(--line);color:var(--mut);border-radius:6px;padding:5px 0;cursor:pointer;font:inherit;font-size:11px;line-height:1.2}#days button b{display:block;color:var(--txt);font-size:13px}#days button.on{border-color:var(--fire);color:var(--txt)}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:10px}.seg button{flex:1;background:none;border:0;color:var(--mut);padding:6px;cursor:pointer;font:inherit;font-size:12px}.seg button.on{background:#2a2c31;color:var(--txt)}
+#dist{display:flex;height:10px;border-radius:5px;overflow:hidden;margin-top:6px}#dist i{display:block}
+.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:var(--mut);margin-top:8px}.legend span{display:flex;align-items:center;gap:4px}.legend i{width:10px;height:10px;border-radius:2px}
+#top{list-style:none;margin:0;padding:0}#top li{display:flex;justify-content:space-between;align-items:center;padding:3px 0;cursor:pointer}#top li:hover{color:var(--hot)}
+.tag{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:600;color:#000}
+.note{color:var(--mut);font-size:11px;margin:4px 0 0}
+#card h3{font-size:20px;margin:0}#card .sub{color:var(--mut);font-size:12px;margin-bottom:10px}
+.big{font-size:28px;font-weight:600;font-variant-numeric:tabular-nums;margin-right:6px}
+.kv{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}.kv b{display:block;font-size:17px;font-variant-numeric:tabular-nums}.kv small{color:var(--mut);font-size:11px}
+canvas.ch{width:100%;height:70px;display:block}
+a{color:var(--hot)}details{margin-top:12px;color:var(--mut);font-size:12px}summary{cursor:pointer;color:var(--txt)}
+.btns{display:flex;gap:8px;margin-top:12px}.btns a,.btns button{flex:1;text-align:center;text-decoration:none;background:#2a2c31;color:var(--txt);border:0;border-radius:8px;padding:8px;cursor:pointer;font:inherit;font-size:12px}
+@media(max-width:640px){#side{bottom:auto;right:16px;width:auto;max-height:45vh}#card{left:16px;right:16px;top:auto;bottom:16px;width:auto;max-height:50vh}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="side" class="panel">
+  <h1>Fire Tracker <span>Sicilia</span></h1>
+  <nav><a href="./">Evento 2023</a><a href="storico.html">Storico</a><a class="on" href="rischio.html">Rischio previsto</a></nav>
+  <div class="run" id="run"></div>
+  <div id="days"></div>
+  <div class="seg"><button id="mF" class="on">Pericolo meteo</button><button id="mP">Priorità</button></div>
+  <div class="legend" id="leg"></div>
+  <h2>Comuni per classe</h2><div id="dist"></div>
+  <h2 id="topT">Comuni più a rischio</h2><ul id="top"></ul>
+  <details><summary>Metodo e limiti</summary>
+    <p><b>Pericolo meteo:</b> Fire Weather Index (FWI) canadese, lo stesso usato dal sistema europeo EFFIS, calcolato a mezzogiorno per il centro di ogni comune con le previsioni Open-Meteo e gli ultimi 60 giorni di meteo. Classi EFFIS. Si aggiorna ogni mattina.</p>
+    <p><b>Priorità:</b> somma della classe di pericolo (0–5) e della propensione storica del comune (0 = bassa, 1 = media se tra il 60% dei comuni con più inneschi 2001–2025, 2 = alta se nel 10% più colpito). 0–1 bassa, 2–3 media, 4–5 alta, 6+ massima.</p>
+    <p>Il FWI misura quanto il meteo favorisce innesco e propagazione, non la probabilità che un incendio avvenga. Previsione a punto singolo per comune: nei comuni estesi o montuosi le condizioni variano.</p>
+    <p>Prototipo di ricerca, <b>non sostituisce i bollettini ufficiali</b> della Protezione Civile regionale.</p>
+  </details>
+</div>
+<div id="card" class="panel">
+  <h3 id="cName"></h3><div class="sub" id="cSub"></div>
+  <span class="big" id="cF"></span><span class="tag" id="cFc"></span> <span class="tag" id="cP"></span>
+  <div class="kv"><div><b id="cT"></b><small>temp. max</small></div><div><b id="cRH"></b><small>umidità min</small></div><div><b id="cW"></b><small>vento max</small></div></div>
+  <h2>Pericolo nei prossimi 7 giorni</h2><canvas class="ch" id="cCh"></canvas>
+  <p class="note" id="cHist"></p>
+  <div class="btns"><a id="cLink" href="#">Scheda storica</a><button id="close">Chiudi</button></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const FWI_C = [[5.2,'Molto basso','#4caf50'],[11.2,'Basso','#cddc39'],[21.3,'Moderato','#ffc107'],[38,'Alto','#ff7043'],[50,'Molto alto','#d32f2f'],[1e9,'Estremo','#b04bd6']];
+const PRI_C = [['Bassa','#3d6b4a'],['Media','#ffc107'],['Alta','#ff5a1f'],['Massima','#b04bd6']];
+const HIST_L = ['bassa','media','alta'];
+const fcls = v => FWI_C.findIndex(c => v < c[0]);
+const pcls = s => s >= 6 ? 3 : s >= 4 ? 2 : s >= 2 ? 1 : 0;
+const dayFmt = d => new Date(d + 'T12:00Z').toLocaleDateString('it-IT', {weekday:'short', day:'numeric', timeZone:'Europe/Rome'});
+
+const map = new maplibregl.Map({container:'map', center:[14.1, 37.55], zoom:7.4, style:{version:8, sources:{
+  sat:{type:'raster', tileSize:256, maxzoom:15, attribution:'Sentinel-2 cloudless 2020 © EOX', tiles:['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg']}},
+  layers:[{id:'sat', type:'raster', source:'sat', paint:{'raster-brightness-max':.5, 'raster-saturation':-.7}}]}});
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+new ResizeObserver(() => map.resize()).observe($('map'));
+
+Promise.all(['forecast.json', 'history.json', 'comuni.geojson'].map(f => fetch('data/' + f).then(r => r.json())).concat(new Promise(r => map.on('load', r))))
+.then(([F, H, G]) => {
+  const C = H.comuni, n = C.length, sorted = C.map(c => c[4]).sort((a, b) => b - a);
+  const t10 = sorted[Math.floor(n * .1)], t40 = sorted[Math.floor(n * .4)];
+  const hist = C.map(c => c[4] > t10 ? 2 : c[4] > t40 ? 1 : 0);
+  let day = 0, mode = 'F', sel = -1;
+  $('run').textContent = 'Previsione aggiornata il ' + new Date(F.run).toLocaleString('it-IT', {day:'numeric', month:'long', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Rome'});
+  $('days').innerHTML = F.days.map((d, i) => { const [w, num] = dayFmt(d).split(' '); return `<button data-i="${i}">${i ? w : 'oggi'}<b>${num}</b></button>`; }).join('');
+
+  map.addSource('com', {type:'geojson', data:G});
+  map.addLayer({id:'fill', type:'fill', source:'com', paint:{'fill-color':['coalesce',['feature-state','c'],'#000'], 'fill-opacity':.7}});
+  map.addLayer({id:'line', type:'line', source:'com', paint:{'line-color':['case',['boolean',['feature-state','sel'],false],'#fff','rgba(0,0,0,.35)'],
+    'line-width':['case',['boolean',['feature-state','sel'],false],2.5,.5]}});
+
+  function render() {
+    [...$('days').children].forEach((b, i) => b.classList.toggle('on', i === day));
+    $('mF').classList.toggle('on', mode === 'F'); $('mP').classList.toggle('on', mode === 'P');
+    const fc = F.fwi.map(f => fcls(f[day])), pc = fc.map((c, i) => pcls(c + hist[i]));
+    const col = i => mode === 'F' ? FWI_C[fc[i]][2] : PRI_C[pc[i]][1];
+    for (let i = 0; i < n; i++) map.setFeatureState({source:'com', id:i}, {c: col(i)});
+    const classes = mode === 'F' ? FWI_C.map(c => [c[1], c[2]]) : PRI_C, k = mode === 'F' ? fc : pc;
+    $('leg').innerHTML = classes.map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('');
+    $('dist').innerHTML = classes.map(([l, c], j) => { const m = k.filter(x => x === j).length; return m ? `<i style="width:${m / n * 100}%;background:${c}" title="${l}: ${m}"></i>` : ''; }).join('');
+    const order = [...Array(n).keys()].sort((a, b) => mode === 'F' ? F.fwi[b][day] - F.fwi[a][day] : (pc[b] - pc[a]) || (F.fwi[b][day] - F.fwi[a][day]));
+    $('topT').textContent = mode === 'F' ? 'Comuni con pericolo più alto' : 'Comuni con priorità più alta';
+    $('top').innerHTML = order.slice(0, 10).map(i => `<li data-i="${i}"><span>${C[i][0]} <small style="color:var(--mut)">${C[i][1]}</small></span>`
+      + (mode === 'F' ? `<span class="tag" style="background:${FWI_C[fc[i]][2]}">${Math.round(F.fwi[i][day])}</span>` : `<span class="tag" style="background:${PRI_C[pc[i]][1]}">${PRI_C[pc[i]][0]}</span>`) + '</li>').join('');
+    if (sel >= 0) show(sel);
+  }
+  function show(i) {
+    if (sel >= 0 && sel !== i) map.setFeatureState({source:'com', id:sel}, {sel:false});
+    sel = i; map.setFeatureState({source:'com', id:i}, {sel:true});
+    const v = F.fwi[i][day], fc = fcls(v), pc = pcls(fc + hist[i]);
+    $('cName').textContent = C[i][0]; $('cSub').textContent = `Provincia ${C[i][1]} · ${dayFmt(F.days[day])}`;
+    $('cF').textContent = Math.round(v); $('cFc').textContent = FWI_C[fc][1]; $('cFc').style.background = FWI_C[fc][2];
+    $('cP').textContent = 'Priorità ' + PRI_C[pc][0].toLowerCase(); $('cP').style.background = PRI_C[pc][1];
+    $('cT').textContent = F.tmax[i][day] + '°'; $('cRH').textContent = F.rhmin[i][day] + '%'; $('cW').textContent = F.wmax[i][day] + ' km/h';
+    $('cHist').textContent = `Propensione storica ${HIST_L[hist[i]]}: ${C[i][4]} inneschi stimati e incendi in ${C[i][3].filter(x => x).length} anni su 25 (2001–2025).`;
+    $('cLink').href = 'storico.html?c=' + i; $('card').style.display = 'block';
+    const cv = $('cCh'), w = cv.clientWidth, h = cv.clientHeight, g = cv.getContext('2d'), vals = F.fwi[i], m = Math.max(40, ...vals), bw = w / 7;
+    cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio; g.scale(devicePixelRatio, devicePixelRatio);
+    g.font = '10px system-ui'; g.textAlign = 'center';
+    vals.forEach((x, j) => { const bh = Math.max(2, x / m * (h - 26)); g.globalAlpha = j === day ? 1 : .55; g.fillStyle = FWI_C[fcls(x)][2];
+      g.fillRect(j * bw + 3, h - 12 - bh, bw - 6, bh); g.globalAlpha = 1; g.fillStyle = '#e9e6e1'; g.fillText(Math.round(x), j * bw + bw / 2, h - 15 - bh);
+      g.fillStyle = '#8d8a85'; g.fillText(j ? dayFmt(F.days[j]).split(' ')[0] : 'oggi', j * bw + bw / 2, h - 1); });
+  }
+  $('days').onclick = e => { const b = e.target.closest('button'); if (b) { day = +b.dataset.i; render(); } };
+  $('mF').onclick = () => { mode = 'F'; render(); }; $('mP').onclick = () => { mode = 'P'; render(); };
+  $('top').onclick = e => { const li = e.target.closest('li'); if (li) show(+li.dataset.i); };
+  map.on('click', 'fill', e => show(e.features[0].id));
+  map.on('mouseenter', 'fill', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'fill', () => map.getCanvas().style.cursor = '');
+  $('close').onclick = () => { $('card').style.display = 'none'; map.setFeatureState({source:'com', id:sel}, {sel:false}); sel = -1; };
+  render();
+});
+</script>
+</body>
+</html>
