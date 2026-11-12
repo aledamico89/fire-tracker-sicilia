@@ -104,6 +104,7 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl({visualizePitch:true}), 'top-right');
 FT.enhance(map, {dem:'dem', hill:false});
+if (matchMedia('(max-width:700px)').matches) map.jumpTo({...map.cameraForBounds([[12.4, 36.65], [15.65, 38.3]], {padding:{top:150, bottom:250, left:8, right:8}}), pitch:25, bearing:0});
 new ResizeObserver(() => map.resize()).observe($('map'));
 map.once('idle', () => map.resize());
 

@@ -8,7 +8,7 @@
     const foot = document.createElement('div'); foot.className = 'ft-foot';
     foot.innerHTML = `© 2026 <a href="https://alessiodamico.com" target="_blank" rel="noopener">Alessio D'Amico</a> · ideazione e design · ` +
       `<a href="https://alessiodamico.com" target="_blank" rel="noopener">alessiodamico.com</a><br>Codice open source <a href="https://github.com/aledamico89/fire-tracker-sicilia" target="_blank" rel="noopener">MIT</a> · dati © delle rispettive fonti`;
-    document.body.append(nav);
+    document.body.append(nav); setTimeout(() => document.body.classList.add('ft-ready'), 1500);
     // telefono: il pannello dati diventa una scheda dal basso (nella pagina evento è l'analisi; il pannello livelli resta in alto)
     const ana = document.querySelector('#ana'), side = document.querySelector('#side'), sheet = ana || side, card = document.querySelector('#card'), bar = document.querySelector('#bar');
     (sheet || document.body).append(foot);
@@ -17,14 +17,26 @@
     fit(); addEventListener('resize', fit);
     if (sheet) { sheet.classList.add('ft-sheet'); if (ana) sheet.style.setProperty('--ft-peek', '120px');
       const h = document.createElement('button'); h.className = 'ft-handle'; h.setAttribute('aria-label', 'Apri o chiudi il pannello dati');
-      h.onclick = () => sheet.classList.toggle('open'); sheet.prepend(h); }
+      sheet.prepend(h); FT.drag(h, sheet, open => sheet.classList.toggle('open', open)); }
     if (card) { const x = document.createElement('button'); x.className = 'ft-close'; x.textContent = '× Torna alla mappa';
-      x.onclick = () => { typeof window.hide == 'function' ? window.hide() : card.style.display = 'none'; }; card.prepend(x);
+      const close = () => { typeof window.hide == 'function' ? window.hide() : card.style.display = 'none'; }; x.onclick = close; card.prepend(x);
+      const ch = document.createElement('div'); ch.className = 'ft-handle'; card.prepend(ch); FT.drag(ch, card, open => open || close(), true);
       new MutationObserver(() => { if (card.style.display == 'block') sheet?.classList.remove('open'); }).observe(card, {attributes:true, attributeFilter:['style']}); }
   });
 })();
 
 window.FT = {
+  // trascinamento verticale di una scheda: segue il dito, al rilascio decide aperta/chiusa; un tocco alterna
+  drag(h, el, done, dismissOnly = false) {
+    let y0 = null, h0 = 0, moved = false;
+    h.addEventListener('pointerdown', e => { y0 = e.clientY; h0 = el.getBoundingClientRect().height; moved = false; h.setPointerCapture(e.pointerId); });
+    h.addEventListener('pointermove', e => { if (y0 == null) return; const d = e.clientY - y0; if (Math.abs(d) > 6) moved = true;
+      if (moved) { el.style.transition = 'none'; el.style.setProperty('max-height', Math.max(60, Math.min(innerHeight * .85, h0 - d)) + 'px', 'important'); } });
+    const up = e => { if (y0 == null) return; const d = e.clientY - y0; y0 = null; el.style.removeProperty('max-height'); el.style.transition = '';
+      if (!moved) { if (!dismissOnly) done(!el.classList.contains('open')); return; }
+      done(dismissOnly ? d < 80 : (h0 - d) > innerHeight * .35); };
+    h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+  },
   sat: {type:'raster', tileSize:256, maxzoom:19, tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
     attribution:'Immagini © Esri, Maxar, Earthstar Geographics · <a href="https://alessiodamico.com" target="_blank">Alessio D\'Amico</a>'},
   // ricerca comune: campo con suggerimenti sotto il titolo del pannello; pick(i) apre la scheda
@@ -41,7 +53,8 @@ window.FT = {
     inp.addEventListener('change', go); inp.addEventListener('keydown', e => e.key == 'Enter' && go());
   },
   // dem: nome di una sorgente raster-dem già presente nella pagina (evita di scaricare due volte il rilievo)
-  enhance(map, {dem = null, hill = true, buildings = true} = {}) {
+  enhance(map, {dem = null, hill = true, buildings = true, flat = false} = {}) {
+    if (flat) { hill = buildings = false; map.touchZoomRotate.disableRotation(); }
     // telefono: lo zoom su un'area lascia spazio alla scheda in basso
     const fb = map.fitBounds.bind(map), mq = matchMedia('(max-width:700px)');
     map.fitBounds = (b, o = {}) => fb(b, mq.matches ? {...o, padding:{top:60, bottom:Math.round(innerHeight * .6), left:24, right:24}} : o);
@@ -55,7 +68,7 @@ window.FT = {
           'fill-extrusion-height':['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base':['coalesce', ['get', 'render_min_height'], 0],
           'fill-extrusion-opacity':['interpolate', ['linear'], ['zoom'], 14, 0, 15, .8]}});
       }
-      try { map.setSky({'sky-color':'#0f1a2a', 'horizon-color':'#3b4859', 'fog-color':'#2a3340', 'sky-horizon-blend':.7, 'horizon-fog-blend':.6, 'fog-ground-blend':.5,
+      if (!flat) try { map.setSky({'sky-color':'#0f1a2a', 'horizon-color':'#3b4859', 'fog-color':'#2a3340', 'sky-horizon-blend':.7, 'horizon-fog-blend':.6, 'fog-ground-blend':.5,
         'atmosphere-blend':['interpolate', ['linear'], ['zoom'], 0, 1, 10, 0]}); } catch (_) {}
     };
     map.loaded() ? go() : map.once('load', go);

@@ -48,7 +48,7 @@ a{color:var(--hot)}details{margin-top:10px;color:var(--mut);font-size:12px}summa
 #vw button{background:#2a2c31;color:var(--txt);border:0;border-radius:6px;padding:6px 10px;cursor:pointer;font:inherit;font-size:12px}#vw button:hover{background:#3a3c42}
 #vst{color:var(--mut);font-size:12px}
 #print{display:none}
-.banner{position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(255,209,102,.95);color:#1a1a1a;font-size:12px;font-weight:600;padding:5px 12px;border-radius:16px;white-space:nowrap;pointer-events:none}
+.bs{display:none}.banner{position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(255,209,102,.95);color:#1a1a1a;font-size:12px;font-weight:600;padding:5px 12px;border-radius:16px;white-space:nowrap;pointer-events:none}
 .src{list-style:none;margin:0;padding:0}.src li{padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}.src li b{color:var(--txt)}.src a{text-decoration:none;font-weight:600}
 .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.chips span{background:#2a2c31;border-radius:9px;padding:1px 7px;font-size:11px;color:var(--txt)}
 .bib{font-size:11px;color:var(--mut);margin:6px 0 0;padding-left:18px}.bib li{margin-bottom:3px}
@@ -59,7 +59,7 @@ a{color:var(--hot)}details{margin-top:10px;color:var(--mut);font-size:12px}summa
 </head>
 <body>
 <div id="map"></div>
-<div class="banner">Elaborazione sperimentale da dati satellitari · non è il catasto ufficiale del Comune</div>
+<div class="banner"><span class="bl">Elaborazione sperimentale da dati satellitari</span><span class="bs">Dati sperimentali</span> · non è il catasto ufficiale del Comune</div>
 <div id="side" class="panel">
   <h1>Fire Tracker <span>Sicilia</span></h1>
   <div class="sub" id="head"></div>
@@ -147,7 +147,7 @@ const bbox = g => { const c = coords(g); return [Math.min(...c.map(p => p[0])), 
 const areaHa = g => (g.type == 'Polygon' ? [g.coordinates] : g.coordinates).reduce((s, pol) => s + pol.reduce((t, r, i) => {
   const k = 111320 * Math.cos(r[0][1] * Math.PI / 180); let a = 0; for (let j = 0; j < r.length - 1; j++) a += r[j][0] * k * r[j + 1][1] * 111320 - r[j + 1][0] * k * r[j][1] * 111320; return t + (i ? -1 : 1) * Math.abs(a / 2); }, 0), 0) / 1e4;
 
-const map = new maplibregl.Map({container:'map', center:[13.2, 37.95], zoom:10.5, style:{version:8, sources:{
+const map = new maplibregl.Map({container:'map', bounds:[[12.93, 37.77], [13.43, 38.11]], fitBoundsOptions:{padding: innerWidth <= 700 ? {top:80, bottom:190, left:8, right:8} : {left:420, right:40, top:60, bottom:40}}, style:{version:8, sources:{
   sat: FT.sat},
   layers:[{id:'sat', type:'raster', source:'sat', paint:{'raster-brightness-max':.6, 'raster-saturation':-.5}}]}});
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
@@ -208,7 +208,8 @@ Promise.all([fetch(`data/catasto_${C}_${Y}.json`).then(r => r.json()), fetch(`da
   map.addLayer({id:'conf', type:'line', source:'conf', paint:{'line-color':'#fff', 'line-width':1.5, 'line-dasharray':[3, 2], 'line-opacity':.7}});
   map.addLayer({id:'af', type:'fill', source:'a', paint:{'fill-color':['match', ['get', 'gravita'], ...GR.flat(), '#999'], 'fill-opacity':['case', ['boolean', ['feature-state', 'sel'], false], .95, ['get', 'vincolo'], .75, .4]}});
   map.addLayer({id:'al', type:'line', source:'a', paint:{'line-color':['case', ['boolean', ['feature-state', 'sel'], false], '#00e5ff', ['get', 'vincolo'], '#fff', 'rgba(255,255,255,.35)'], 'line-width':['case', ['boolean', ['feature-state', 'sel'], false], 3, ['get', 'vincolo'], 1.4, .6]}});
-  const b = bbox(d.confine); map.fitBounds([[b[0], b[1]], [b[2], b[3]]], {padding:{left:420, right:40, top:40, bottom:40}, duration:0});
+  const b = bbox(d.confine), mob = matchMedia('(max-width:700px)').matches;
+  map.jumpTo(map.cameraForBounds([[b[0], b[1]], [b[2], b[3]]], {padding: mob ? {top:80, bottom:190, left:8, right:8} : {left:420, right:40, top:60, bottom:40}}));
   map.on('click', 'af', e => show(e.features[0].properties.id, false));
   map.on('mouseenter', 'af', () => map.getCanvas().style.cursor = 'pointer'); map.on('mouseleave', 'af', () => map.getCanvas().style.cursor = '');
   $('leg').innerHTML = GR.map(g => `<span><i style="background:${g[1]}"></i>${g[0]}</span>`).join('') + '<span><i style="border:2px solid #fff"></i>con vincolo</span>';

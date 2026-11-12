@@ -76,11 +76,11 @@ function bars(cv, vals, labels, hi = -1, color = '#ff6a00') {
     g.fillRect(i * bw + 1, h - lh - bh, bw - 2, bh); g.globalAlpha = 1;
     if (labels[i]) { g.fillStyle = '#8d8a85'; g.fillText(labels[i], i * bw + bw / 2, h - 1); } });
 }
-const map = new maplibregl.Map({container:'map', center:[14.1, 37.55], zoom:7.4, style:{version:8, sources:{
+const map = new maplibregl.Map({container:'map', maxPitch:0, dragRotate:false, touchPitch:false, center:[14.1, 37.55], zoom:7.4, style:{version:8, sources:{
   sat: FT.sat},
   layers:[{id:'sat', type:'raster', source:'sat', paint:{'raster-brightness-max':.55, 'raster-saturation':-.6}}]}});
-map.addControl(new maplibregl.NavigationControl(), 'top-right');
-FT.enhance(map);
+map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'top-right');
+FT.enhance(map, {flat:true});
 new ResizeObserver(() => map.resize()).observe($('map'));
 
 Promise.all([fetch('data/history.json').then(r => r.json()), fetch('data/comuni.geojson').then(r => r.json()), new Promise(r => map.on('load', r))])

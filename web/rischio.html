@@ -76,11 +76,11 @@ const fcls = v => FWI_C.findIndex(c => v < c[0]);
 const pcls = s => s >= 6 ? 3 : s >= 4 ? 2 : s >= 2 ? 1 : 0;
 const dayFmt = d => new Date(d + 'T12:00Z').toLocaleDateString('it-IT', {weekday:'short', day:'numeric', timeZone:'Europe/Rome'});
 
-const map = new maplibregl.Map({container:'map', center:[14.1, 37.55], zoom:7.4, style:{version:8, sources:{
+const map = new maplibregl.Map({container:'map', maxPitch:0, dragRotate:false, touchPitch:false, center:[14.1, 37.55], zoom:7.4, style:{version:8, sources:{
   sat: FT.sat},
   layers:[{id:'sat', type:'raster', source:'sat', paint:{'raster-brightness-max':.5, 'raster-saturation':-.7}}]}});
-map.addControl(new maplibregl.NavigationControl(), 'top-right');
-FT.enhance(map);
+map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'top-right');
+FT.enhance(map, {flat:true});
 new ResizeObserver(() => map.resize()).observe($('map'));
 
 const ML_C = [[.5,'Molto bassa','#3d6b4a'],[1,'Bassa','#8bc34a'],[2,'Media','#ffc107'],[5,'Alta','#ff7043'],[10,'Molto alta','#d32f2f'],[1e9,'Estrema','#b04bd6']];
