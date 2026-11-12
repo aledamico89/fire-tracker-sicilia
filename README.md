@@ -39,6 +39,19 @@ Gradient boosting (scikit-learn) su 1,7 milioni di righe comune × giorno, 2014�
 
 Variabili più importanti: storico del comune, periodo dell'anno, temperatura massima, superficie, FFMC. Limiti: l'addestramento usa ERA5 su griglia di 50 km, la previsione usa dati previsionali al centroide del comune; MODIS non vede i piccoli incendi. La probabilità assoluta resta bassa (media 0,4% per comune al giorno): conta il confronto relativo.
 
+## Catasto incendi (`catasto.html`) — pilota Monreale 2023
+Bozza automatica del **catasto delle aree percorse dal fuoco**, che la legge 353/2000 (art. 10) impone a ogni comune: su boschi e pascoli bruciati scattano 15 anni di destinazione immutabile, 10 anni di divieto di edificazione, pascolo e caccia, 5 anni senza rimboschimenti con fondi pubblici.
+- Perimetri da Sentinel-2 (dNBR prima/dopo ogni incendio visto da MODIS/VIIRS, 20 m), gravità, copertura del suolo ESA WorldCover.
+- Vincoli e scadenze per ogni area; **elenco foglio/particella** dal servizio INSPIRE dell'Agenzia delle Entrate.
+- Export CSV (pronto per l'ufficio tecnico), GeoJSON (per QGIS), stampa per l'albo.
+- Le aree agricole bruciate da settembre in poi sono marcate "da verificare" (le arature somigliano al fuoco). Bozza da validare con i rilievi del Corpo Forestale.
+
+```bash
+pip install rasterio pyproj shapely scipy
+python3 scripts/burned.py Monreale 2023
+python3 scripts/parcels.py web/data/catasto_monreale_2023.json
+```
+
 ## Rigenerare i dati
 ```bash
 python3 scripts/prepare_data.py
@@ -60,7 +73,8 @@ python3 -m http.server 8000 -d web
 ## Roadmap
 1. Analisi evento e storico (fatto) · dati live (prossimo)
 2. Rischio previsto FWI per comune (fatto) · modello machine learning (fatto)
-3. Simulatore di propagazione interattivo
+3. Catasto incendi automatico: pilota Monreale 2023 (fatto) · altri anni e comuni, validazione con il Corpo Forestale
+4. Simulatore di propagazione interattivo
 
 ## Limiti
 Prototipo di ricerca e divulgazione, **non è un sistema di allerta**. Un focolaio è un pixel caldo visto dal satellite, non un perimetro; fumo e nuvole possono nasconderlo. Il meteo è una rianalisi su griglia di circa 50 km.

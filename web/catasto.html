@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Catasto Incendi</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+:root{--bg:#0e0f11;--panel:rgba(18,19,22,.92);--line:#2a2c31;--txt:#e9e6e1;--mut:#8d8a85;--fire:#ff6a00;--hot:#ffd166}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,-apple-system,sans-serif}
+#map{position:fixed;inset:0}
+.panel{position:fixed;background:var(--panel);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow:auto}
+#side{top:16px;left:16px;bottom:16px;width:340px}#card{top:16px;right:56px;width:330px;max-height:calc(100vh - 32px);display:none}
+h1{font-size:16px;margin:0 0 2px}h1 span{color:var(--fire)}nav{font-size:12px;margin-bottom:10px}nav a{color:var(--mut);text-decoration:none;margin-right:10px}nav a.on{color:var(--txt);border-bottom:2px solid var(--fire)}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:14px 0 6px;font-weight:600}
+.sub{color:var(--mut);font-size:12px}
+.kv{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}.kv b{display:block;font-size:20px;font-variant-numeric:tabular-nums}.kv small{color:var(--mut);font-size:11px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:var(--mut);margin-top:8px}.legend span{display:flex;align-items:center;gap:4px}.legend i{width:10px;height:10px;border-radius:2px}
+label.chk{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--mut);margin-top:8px;cursor:pointer}
+#list{list-style:none;margin:0;padding:0}#list li{display:grid;grid-template-columns:26px 1fr auto;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:12px}#list li:hover{color:var(--hot)}
+#list .n{color:var(--mut)}.tag{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:600;color:#000}
+.v{background:#ff6a00}.nv{background:#444;color:#ccc}
+.btns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.btns a,.btns button{flex:1;text-align:center;text-decoration:none;background:#2a2c31;color:var(--txt);border:0;border-radius:8px;padding:8px 6px;cursor:pointer;font:inherit;font-size:12px;white-space:nowrap}.btns a:hover,.btns button:hover{background:#3a3c42}
+#card h3{font-size:20px;margin:0}
+table{width:100%;border-collapse:collapse;font-size:12px}td{padding:3px 0;border-bottom:1px solid var(--line)}td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:6px 0}.bar i{display:block}
+a{color:var(--hot)}details{margin-top:12px;color:var(--mut);font-size:12px}summary{cursor:pointer;color:var(--txt)}
+.parc{max-height:140px;overflow:auto;font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
+.x{position:absolute;top:8px;right:10px;background:none;border:0;color:var(--mut);font-size:18px;cursor:pointer}
+#print{display:none}
+@media(max-width:640px){#side{bottom:auto;right:16px;width:auto;max-height:45vh}#card{left:16px;right:16px;top:auto;bottom:16px;width:auto;max-height:50vh}}
+@media print{#map,#side,#card{display:none!important}body{background:#fff;color:#000;font-size:11px}#print{display:block;padding:10mm}#print table{font-size:10px}#print td,#print th{border:1px solid #999;padding:3px 5px;text-align:left}#print h1{font-size:16px}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="side" class="panel">
+  <h1>Fire Tracker <span>Sicilia</span></h1>
+  <nav><a href="./">Evento 2023</a><a href="storico.html">Storico</a><a href="rischio.html">Rischio previsto</a><a class="on" href="catasto.html">Catasto incendi</a></nav>
+  <div class="sub" id="head"></div>
+  <div class="kv"><div><b id="kN">–</b><small>aree bruciate</small></div><div><b id="kH">–</b><small>ettari</small></div><div><b id="kV">–</b><small>ha con vincoli</small></div></div>
+  <div class="legend" id="leg"></div>
+  <label class="chk"><input type="checkbox" id="onlyV"> Solo aree soggette a vincolo (boschi e pascoli)</label>
+  <div class="btns"><button id="bCsv">Elenco particelle (CSV)</button><button id="bGeo">Perimetri (GeoJSON)</button><button onclick="print()">Stampa</button></div>
+  <h2>Aree, dalla più estesa</h2><ul id="list"></ul>
+  <details><summary>Cosa dice la legge</summary>
+    <p>La legge 353/2000 (art. 10) obbliga i comuni a censire ogni anno le aree percorse dal fuoco, con l'aiuto dei rilievi del Corpo Forestale, e a pubblicarle all'albo pretorio. Su <b>boschi e pascoli</b> bruciati scattano vincoli:</p>
+    <p>• <b>15 anni:</b> la destinazione d'uso non può cambiare.<br>• <b>10 anni:</b> vietato costruire edifici e infrastrutture; vietati pascolo e caccia.<br>• <b>5 anni:</b> vietati rimboschimenti con fondi pubblici senza autorizzazione.</p>
+    <p>I vincoli disincentivano gli incendi dolosi legati a speculazione edilizia e pascolo: senza un catasto aggiornato non sono applicabili.</p>
+  </details>
+  <details><summary>Metodo e limiti</summary>
+    <p>Per ogni incendio rilevato dai satelliti MODIS e VIIRS (NASA FIRMS) confrontiamo le immagini Sentinel-2 prima e dopo il fuoco. L'indice dNBR misura la perdita di vegetazione: sopra <span id="mTh"></span> il pixel (20 m) è considerato bruciato. Teniamo solo le aree entro <span id="mD"></span> m da un focolaio e più grandi di <span id="mA"></span> ha, per escludere mietiture e arature. Da settembre, su coltivi e prati, servono criteri più severi e le aree restano "da verificare": le arature autunnali scuriscono i campi come il fuoco.</p>
+    <p>Copertura del suolo: ESA WorldCover 2021 (10 m). Un'area è "soggetta a vincolo" se almeno metà è bosco, arbusteto o prato/pascolo. Particelle: servizio INSPIRE dell'Agenzia delle Entrate, un punto ogni 50 m.</p>
+    <p><b>È una bozza tecnica</b>: gli incendi piccoli o non visti dal satellite mancano, i bordi hanno un margine di circa 20 m e le particelle sul bordo vanno verificate. Va validata dall'ufficio tecnico con i rilievi del Corpo Forestale prima dell'approvazione.</p>
+  </details>
+</div>
+<div id="card" class="panel"><button class="x" onclick="hide()">×</button><div id="cb"></div></div>
+<div id="print"></div>
+<script>
+const $ = id => document.getElementById(id);
+const Q = new URLSearchParams(location.search), C = Q.get('c') || 'monreale', Y = Q.get('y') || '2023';
+const GR = [['bassa','#ffd166'],['medio-bassa','#ff9f1c'],['medio-alta','#ff6a00'],['alta','#d62828']];
+const LC = {10:['Bosco','#2e7d32'],20:['Arbusteto','#8d9b3a'],30:['Prato/pascolo','#c5b358'],40:['Coltivi','#e0a96d'],50:['Edificato','#9e9e9e'],60:['Suolo nudo','#bcaaa4'],80:['Acqua','#4fc3f7'],90:['Zona umida','#4db6ac']};
+const fmt = (n, d = 0) => n.toLocaleString('it-IT', {maximumFractionDigits: d, minimumFractionDigits: d});
+const dt = s => s.split('-').reverse().join('/');
+const plus = (s, y) => dt((+s.slice(0, 4) + y) + s.slice(4));
+const map = new maplibregl.Map({container:'map', center:[13.2, 37.95], zoom:10.5, style:{version:8, sources:{
+  sat:{type:'raster', tileSize:256, maxzoom:15, attribution:'Sentinel-2 cloudless 2020 © EOX · Copernicus · NASA FIRMS · ESA WorldCover · Agenzia Entrate', tiles:['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg']}},
+  layers:[{id:'sat', type:'raster', source:'sat', paint:{'raster-brightness-max':.6, 'raster-saturation':-.5}}]}});
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+new ResizeObserver(() => map.resize()).observe($('map'));
+let D, sel = null;
+$('leg').innerHTML = GR.map(g => `<span><i style="background:${g[1]}"></i>${g[0]}</span>`).join('') + '<span><i style="border:2px solid #fff"></i>con vincolo</span>';
+
+Promise.all([fetch(`data/catasto_${C}_${Y}.json`).then(r => r.json()), new Promise(r => map.on('load', r))]).then(([d]) => {
+  D = d; const F = d.features, P = f => f.properties;
+  document.title = `Catasto Incendi ${d.comune} ${d.anno}`;
+  $('head').innerHTML = `<b style="color:var(--txt);font-size:15px">${d.comune} · ${d.anno}</b> — bozza di catasto delle aree percorse dal fuoco`;
+  $('kN').textContent = F.length;
+  $('kH').textContent = fmt(F.reduce((s, f) => s + P(f).ha, 0));
+  $('kV').textContent = fmt(F.filter(f => P(f).vincolo).reduce((s, f) => s + P(f).ha, 0));
+  $('mTh').textContent = d.metodo.soglia_dnbr; $('mD').textContent = d.metodo.dist_focolaio_m; $('mA').textContent = fmt(d.metodo.area_min_ha, 1);
+  map.addSource('conf', {type:'geojson', data:{type:'Feature', geometry:d.confine}});
+  map.addSource('a', {type:'geojson', data:d, promoteId:'id'});
+  map.addLayer({id:'conf', type:'line', source:'conf', paint:{'line-color':'#fff', 'line-width':1.5, 'line-dasharray':[3, 2], 'line-opacity':.7}});
+  map.addLayer({id:'af', type:'fill', source:'a', paint:{'fill-color':['match', ['get', 'gravita'], ...GR.flat(), '#999'], 'fill-opacity':['case', ['boolean', ['feature-state', 'sel'], false], .95, ['get', 'vincolo'], .75, .4]}});
+  map.addLayer({id:'al', type:'line', source:'a', paint:{'line-color':['case', ['boolean', ['feature-state', 'sel'], false], '#00e5ff', ['get', 'vincolo'], '#fff', 'rgba(255,255,255,.35)'], 'line-width':['case', ['boolean', ['feature-state', 'sel'], false], 3, ['get', 'vincolo'], 1.4, .6]}});
+  const b = d.confine.coordinates.flat(3); const xs = b.filter((_, i) => i % 2 == 0), ys = b.filter((_, i) => i % 2);
+  map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], {padding:{left:380, right:40, top:40, bottom:40}, duration:0});
+  map.on('click', 'af', e => show(e.features[0].properties.id, false));
+  map.on('mouseenter', 'af', () => map.getCanvas().style.cursor = 'pointer'); map.on('mouseleave', 'af', () => map.getCanvas().style.cursor = '');
+  $('onlyV').onchange = list; list(); printable();
+  const s = +Q.get('a'); if (s) show(s, true);
+});
+
+function list() {
+  const only = $('onlyV').checked;
+  map.setFilter('af', only ? ['get', 'vincolo'] : null); map.setFilter('al', only ? ['get', 'vincolo'] : null);
+  $('list').innerHTML = D.features.filter(f => !only || f.properties.vincolo).map(({properties: p}) =>
+    `<li data-i="${p.id}"><span class="n">${p.id}</span><span>${fmt(p.ha, 1)} ha · ${dt(p.dal)}${p.affidabilita == 'alta' ? '' : ' <span title="Da verificare: possibile aratura" style="color:var(--hot)">?</span>'}</span><span class="tag ${p.vincolo ? 'v' : 'nv'}">${p.vincolo ? 'vincolo' : 'coltivi/altro'}</span></li>`).join('');
+  $('list').querySelectorAll('li').forEach(li => li.onclick = () => show(+li.dataset.i, true));
+}
+
+function show(id, fly) {
+  const f = D.features.find(f => f.properties.id == id), p = f.properties;
+  if (sel) map.setFeatureState({source:'a', id:sel}, {sel:false});
+  sel = id; map.setFeatureState({source:'a', id}, {sel:true});
+  if (fly) { const c = f.geometry.coordinates.flat(3); const xs = c.filter((_, i) => i % 2 == 0), ys = c.filter((_, i) => i % 2);
+    map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], {padding:{left:400, right:400, top:80, bottom:80}, maxZoom:15}); }
+  const lc = Object.entries(p.lc).sort((a, b) => b[1] - a[1]);
+  const pc = p.particelle || [], fogli = {};
+  pc.forEach(([, fg, pa]) => (fogli[fg] = fogli[fg] || []).push(pa));
+  const ctr = f.geometry.coordinates.flat(3); const lon = ctr.filter((_, i) => i % 2 == 0), lat = ctr.filter((_, i) => i % 2);
+  const cx = ((Math.min(...lon) + Math.max(...lon)) / 2).toFixed(4), cy = ((Math.min(...lat) + Math.max(...lat)) / 2).toFixed(4);
+  const day = (s, n) => { const x = new Date(s); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+  const cb = (a, b) => `https://browser.dataspace.copernicus.eu/?zoom=15&lat=${cy}&lng=${cx}&datasetId=S2_L2A_CDAS&layerId=1_TRUE_COLOR&fromTime=${a}T00%3A00%3A00.000Z&toTime=${b}T23%3A59%3A59.999Z`;
+  $('cb').innerHTML = `<h3>Area ${p.id}</h3><div class="sub">${d_(p)} · ${p.focolai} rilevamenti satellitari</div>
+    ${p.affidabilita == 'alta' ? '' : '<p class="sub" style="color:var(--hot)">Da verificare: area agricola in autunno, il cambiamento può essere un\'aratura e non un incendio. Controlla le immagini prima/dopo.</p>'}
+    <div class="kv"><div><b>${fmt(p.ha, 1)}</b><small>ettari</small></div><div><b style="color:${GR.find(g => g[0] == p.gravita)[1]}">${p.gravita}</b><small>gravità (dNBR ${p.dnbr})</small></div><div><b>${pc.length}</b><small>particelle</small></div></div>
+    <h2>Copertura del suolo prima del fuoco</h2><div class="bar">${lc.map(([k, v]) => `<i style="width:${v * 100}%;background:${(LC[k] || ['', '#666'])[1]}"></i>`).join('')}</div>
+    <div class="legend">${lc.map(([k, v]) => `<span><i style="background:${(LC[k] || ['', '#666'])[1]}"></i>${(LC[k] || ['Altro'])[0]} ${Math.round(v * 100)}%</span>`).join('')}</div>
+    <h2>Vincoli L. 353/2000</h2>${p.vincolo ? `<table>
+      <tr><td>Destinazione d'uso immutabile</td><td>fino al ${plus(p.dal, 15)}</td></tr>
+      <tr><td>Divieto di edificazione</td><td>fino al ${plus(p.dal, 10)}</td></tr>
+      <tr><td>Divieto di pascolo e caccia</td><td>fino al ${plus(p.dal, 10)}</td></tr>
+      <tr><td>Rimboschimento con fondi pubblici</td><td>fino al ${plus(p.dal, 5)}</td></tr></table>`
+      : `<p class="sub">Prevalenza di coltivi o altre superfici (bosco/pascolo ${Math.round(p.bosco_pascolo * 100)}%): vincoli da valutare particella per particella.</p>`}
+    <h2>Particelle catastali (foglio: particelle)</h2><div class="parc">${Object.entries(fogli).map(([fg, ps]) => `<b>Foglio ${fg}</b>: ${ps.join(', ')}`).join('<br>') || 'non disponibili'}</div>
+    <h2>Verifica sulle immagini</h2><div class="btns"><a target="_blank" href="${cb(day(p.dal, -20), day(p.dal, -1))}">Prima</a><a target="_blank" href="${cb(day(p.al, 1), day(p.al, 25))}">Dopo</a></div>
+    <p class="sub">Copernicus Browser, Sentinel-2 a colori reali. ${cy}, ${cx}</p>`;
+  $('card').style.display = 'block';
+}
+const d_ = p => p.dal == p.al ? dt(p.dal) : `${dt(p.dal)} – ${dt(p.al)}`;
+function hide() { $('card').style.display = 'none'; if (sel) map.setFeatureState({source:'a', id:sel}, {sel:false}); sel = null; }
+
+function rows() {
+  const r = [['area', 'data_inizio', 'data_fine', 'ettari_area', 'gravita', 'bosco_pascolo_pct', 'vincolo', 'affidabilita', 'codice_comune', 'foglio', 'particella', 'edificazione_vietata_fino', 'destinazione_immutabile_fino']];
+  D.features.forEach(({properties: p}) => (p.particelle?.length ? p.particelle : [['', '', '']]).forEach(([cc, fg, pa]) =>
+    r.push([p.id, p.dal, p.al, p.ha, p.gravita, Math.round(p.bosco_pascolo * 100), p.vincolo ? 'si' : 'da valutare', p.affidabilita, cc, fg, pa, p.vincolo ? plus(p.dal, 10) : '', p.vincolo ? plus(p.dal, 15) : ''])));
+  return r;
+}
+function dl(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); }
+$('bCsv').onclick = () => dl(`catasto_incendi_${C}_${Y}.csv`, '﻿' + rows().map(r => r.join(';')).join('\n'), 'text/csv');
+$('bGeo').onclick = () => dl(`aree_percorse_${C}_${Y}.geojson`, JSON.stringify({type:'FeatureCollection', features:D.features}), 'application/geo+json');
+function printable() {
+  const F = D.features;
+  $('print').innerHTML = `<h1>Comune di ${D.comune} — Aree percorse dal fuoco ${D.anno} (bozza)</h1>
+    <p>Elaborazione automatica da immagini satellitari Sentinel-2 e NASA FIRMS, ai sensi dell'art. 10 L. 353/2000. Da validare con i rilievi del Corpo Forestale. Aree: ${F.length}, ettari: ${fmt(F.reduce((s, f) => s + f.properties.ha, 0), 1)}.</p>
+    <table><tr><th>Area</th><th>Data</th><th>Ettari</th><th>Bosco/pascolo</th><th>Vincolo</th><th>Particelle (foglio: particelle)</th></tr>
+    ${F.map(({properties: p}) => { const fo = {}; (p.particelle || []).forEach(([, fg, pa]) => (fo[fg] = fo[fg] || []).push(pa));
+      return `<tr><td>${p.id}</td><td>${d_(p)}</td><td>${fmt(p.ha, 1)}</td><td>${Math.round(p.bosco_pascolo * 100)}%</td><td>${p.vincolo ? 'sì, fino al ' + plus(p.dal, 15) : 'da valutare'}</td><td>${Object.entries(fo).map(([f, ps]) => `F.${f}: ${ps.join(', ')}`).join('; ')}</td></tr>`; }).join('')}</table>`;
+}
+</script>
+</body>
+</html>
