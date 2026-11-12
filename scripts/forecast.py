@@ -3,6 +3,19 @@ Usa solo file in web/data (gira anche su GitHub Actions). Scrive web/data/foreca
 import json, urllib.request, urllib.parse
 from datetime import datetime, timezone
 from fwi import series
+from features import daily, calendar
+
+def ml_probability(feat_rows, cal_rows):
+    """Probabilità di innesco con il modello addestrato (se disponibile)."""
+    try:
+        import joblib, numpy as np
+        m = joblib.load("models/fire_model.joblib")
+    except Exception as e:
+        print("modello non disponibile:", e); return None
+    st = json.load(open("models/static.json")); H = json.load(open(f"{OUT}/history.json"))
+    X = [feat_rows[c][k] + st[c] + [H["comuni"][c][4] / len(H["years"])] + cal_rows[k] for c in range(len(feat_rows)) for k in range(DAYS)]
+    p = m.predict_proba(np.array(X, np.float32))[:, 1]
+    return [[round(float(x), 5) for x in p[c * DAYS:(c + 1) * DAYS]] for c in range(len(feat_rows))]
 
 OUT, PAST, DAYS, CHUNK = "web/data", 60, 7, 100
 
@@ -23,7 +36,7 @@ if __name__ == "__main__":
     data = [x for i in range(0, len(locs), CHUNK) for x in fetch(locs[i:i + CHUNK])]
     times = data[0]["hourly"]["time"]; nd = len(times) // 24
     days = [times[k * 24][:10] for k in range(nd)][-DAYS:]
-    fwi, tmax, rhmin, wmax = [], [], [], []
+    fwi, tmax, rhmin, wmax, ml_rows = [], [], [], [], []
     for d in data:
         h = d["hourly"]; rows = []
         for k in range(nd):
@@ -32,8 +45,12 @@ if __name__ == "__main__":
             rows.append((int(times[n][5:7]), h["temperature_2m"][n], h["relative_humidity_2m"][n], h["wind_speed_10m"][n], rain))
         fwi.append(series(rows)[-DAYS:])
         day = lambda key, f: [round(f(v for v in h[key][k * 24:(k + 1) * 24] if v is not None)) for k in range(nd - DAYS, nd)]
+        agg = lambda key, f: [f(v for v in h[key][k * 24:(k + 1) * 24] if v is not None) for k in range(nd)]
+        dates = [times[k * 24][:10] for k in range(nd)]
+        ml_rows.append(daily(dates, agg("temperature_2m", max), agg("relative_humidity_2m", min), agg("wind_speed_10m", max), agg("precipitation", sum))[-DAYS:])
         tmax.append(day("temperature_2m", max)); rhmin.append(day("relative_humidity_2m", min)); wmax.append(day("wind_speed_10m", max))
-    json.dump({"run": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"), "days": days, "fwi": fwi, "tmax": tmax, "rhmin": rhmin, "wmax": wmax},
+    prob = ml_probability(ml_rows, [calendar(d) for d in days])
+    json.dump({"run": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"), "days": days, "fwi": fwi, "p": prob, "tmax": tmax, "rhmin": rhmin, "wmax": wmax},
               open(f"{OUT}/forecast.json", "w"), separators=(",", ":"))
     flat = [v for f in fwi for v in f]
     print("comuni:", len(fwi), "| giorni:", days[0], "→", days[-1], "| FWI min/med/max:", min(flat), round(sum(flat) / len(flat), 1), max(flat))

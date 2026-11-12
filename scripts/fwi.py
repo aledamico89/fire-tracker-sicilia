@@ -40,6 +40,10 @@ def dc(T, r, Do, mon):
     return Do + 0.5 * V
 
 def fwi(F, P, D, W):
+    return indices(F, P, D, W)[2]
+
+def indices(F, P, D, W):
+    """Ritorna (ISI, BUI, FWI)."""
     fm = 147.2 * (101 - F) / (59.5 + F)
     isi = 0.208 * exp(0.05039 * W) * 91.9 * exp(-0.1386 * fm) * (1 + fm ** 5.31 / 4.93e7)
     if P + D == 0:
@@ -50,7 +54,7 @@ def fwi(F, P, D, W):
         U = max(0, P - (1 - 0.8 * D / (P + 0.4 * D)) * (0.92 + (0.0114 * P) ** 1.7))
     fD = 0.626 * U ** 0.809 + 2 if U <= 80 else 1000 / (25 + 108.64 * exp(-0.023 * U))
     B = 0.1 * isi * fD
-    return exp(2.72 * (0.434 * log(B)) ** 0.647) if B > 1 else B
+    return isi, U, (exp(2.72 * (0.434 * log(B)) ** 0.647) if B > 1 else B)
 
 def series(days):
     """days: lista di (mese, T, H, W, r) a mezzogiorno. Ritorna FWI giornaliero."""
@@ -59,4 +63,13 @@ def series(days):
         H = min(H, 100)
         F, P, D = ffmc(T, H, W, r, F), dmc(T, H, r, P, mon), dc(T, r, D, mon)
         out.append(round(fwi(F, P, D, W), 1))
+    return out
+
+def components(days):
+    """days: lista di (mese, T, H, W, r). Ritorna per giorno (FFMC, DMC, DC, ISI, BUI, FWI)."""
+    F, P, D, out = 85.0, 6.0, 15.0, []
+    for mon, T, H, W, r in days:
+        H = min(H, 100)
+        F, P, D = ffmc(T, H, W, r, F), dmc(T, H, r, P, mon), dc(T, r, D, mon)
+        out.append((F, P, D) + indices(F, P, D, W))
     return out

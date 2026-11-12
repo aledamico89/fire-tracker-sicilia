@@ -38,7 +38,7 @@ a{color:var(--hot)}details{margin-top:12px;color:var(--mut);font-size:12px}summa
   <nav><a href="./">Evento 2023</a><a href="storico.html">Storico</a><a class="on" href="rischio.html">Rischio previsto</a></nav>
   <div class="run" id="run"></div>
   <div id="days"></div>
-  <div class="seg"><button id="mF" class="on">Pericolo meteo</button><button id="mP">Priorità</button></div>
+  <div class="seg"><button id="mF" class="on">Pericolo meteo</button><button id="mP">Priorità</button><button id="mM" hidden>Modello ML</button></div>
   <div class="legend" id="leg"></div>
   <h2>Comuni per classe</h2><div id="dist"></div>
   <h2 id="topT">Comuni più a rischio</h2><ul id="top"></ul>
@@ -48,10 +48,19 @@ a{color:var(--hot)}details{margin-top:12px;color:var(--mut);font-size:12px}summa
     <p>Il FWI misura quanto il meteo favorisce innesco e propagazione, non la probabilità che un incendio avvenga. Previsione a punto singolo per comune: nei comuni estesi o montuosi le condizioni variano.</p>
     <p>Prototipo di ricerca, <b>non sostituisce i bollettini ufficiali</b> della Protezione Civile regionale.</p>
   </details>
+  <details id="mlBox" hidden><summary>Come funziona il modello ML</summary>
+    <p>Gradient Boosting addestrato su ogni comune e ogni giorno dal 2014 al 2021: meteo e indici FWI (ERA5), propensione storica del comune, quota, superficie, densità abitativa, giorno dell'anno, weekend e festivi. Bersaglio: almeno un innesco rilevato dal satellite (MODIS) nel comune quel giorno. Schema ispirato a Mesogeos (Track A).</p>
+    <p>Verifica su anni mai visti dal modello (<span id="mlTest"></span>):</p>
+    <table id="mlTab" style="width:100%;font-size:11px;border-collapse:collapse"></table>
+    <p>AUPRC: precisione media nel trovare i giorni-comune con innesco (più alto è meglio). "Top 10%": quota di inneschi reali che cadono nel 10% dei giorni-comune giudicati più a rischio.</p>
+    <p>Fattori più influenti: <span id="mlImp"></span>.</p>
+    <p>Il modello impara solo da incendi visibili dal satellite e non conosce le cause. Probabilità indicative, da leggere come confronto tra comuni e giorni.</p>
+  </details>
 </div>
 <div id="card" class="panel">
   <h3 id="cName"></h3><div class="sub" id="cSub"></div>
   <span class="big" id="cF"></span><span class="tag" id="cFc"></span> <span class="tag" id="cP"></span>
+  <p class="note" id="cM" style="font-size:13px;color:var(--txt)"></p>
   <div class="kv"><div><b id="cT"></b><small>temp. max</small></div><div><b id="cRH"></b><small>umidità min</small></div><div><b id="cW"></b><small>vento max</small></div></div>
   <h2>Pericolo nei prossimi 7 giorni</h2><canvas class="ch" id="cCh"></canvas>
   <p class="note" id="cHist"></p>
@@ -72,8 +81,22 @@ const map = new maplibregl.Map({container:'map', center:[14.1, 37.55], zoom:7.4,
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 new ResizeObserver(() => map.resize()).observe($('map'));
 
-Promise.all(['forecast.json', 'history.json', 'comuni.geojson'].map(f => fetch('data/' + f).then(r => r.json())).concat(new Promise(r => map.on('load', r))))
-.then(([F, H, G]) => {
+const ML_C = [[.5,'Molto bassa','#3d6b4a'],[1,'Bassa','#8bc34a'],[2,'Media','#ffc107'],[5,'Alta','#ff7043'],[10,'Molto alta','#d32f2f'],[1e9,'Estrema','#b04bd6']];
+const mcls = r => ML_C.findIndex(c => r < c[0]);
+const FEAT_IT = {tmax:'temperatura', rhmin:'umidità', wmax:'vento', prec:'pioggia', ffmc:'secchezza combustibile fine', dmc:'secchezza strato organico', dc:'siccità profonda',
+  isi:'indice di propagazione', bui:'combustibile disponibile', fwi:'FWI', dry_days:'giorni senza pioggia', lat:'latitudine', lon:'longitudine', elev:'quota', area_km2:'superficie',
+  log_dens:'densità abitativa', hist_rate:'storico del comune', doy:'periodo dell\'anno', weekday:'giorno della settimana', festivo:'weekend/festivi'};
+Promise.all(['forecast.json', 'history.json', 'comuni.geojson'].map(f => fetch('data/' + f).then(r => r.json()))
+  .concat(fetch('data/model.json').then(r => r.ok ? r.json() : null).catch(() => null), new Promise(r => map.on('load', r))))
+.then(([F, H, G, M]) => {
+  const hasML = !!(F.p && M);
+  if (hasML) {
+    $('mM').hidden = false; $('mlBox').hidden = false; $('mlTest').textContent = `${M.test}, ${M.n_test_ign.toLocaleString('it-IT')} inneschi`;
+    $('mlTab').innerHTML = '<tr style="color:var(--txt)"><td></td><td>AUROC</td><td>AUPRC</td><td>Top 10%</td></tr>' + Object.entries(M.metrics).map(([k, v]) =>
+      `<tr><td>${k}</td><td>${v.auroc}</td><td>${v.auprc}</td><td>${Math.round(v.top10 * 100)}%</td></tr>`).join('');
+    $('mlImp').textContent = M.importance.slice(0, 5).map(([k]) => FEAT_IT[k] || k).join(', ');
+  }
+  const ratio = (i, d) => F.p[i][d] / M.base_rate;
   const C = H.comuni, n = C.length, sorted = C.map(c => c[4]).sort((a, b) => b - a);
   const t10 = sorted[Math.floor(n * .1)], t40 = sorted[Math.floor(n * .4)];
   const hist = C.map(c => c[4] > t10 ? 2 : c[4] > t40 ? 1 : 0);
@@ -88,17 +111,19 @@ Promise.all(['forecast.json', 'history.json', 'comuni.geojson'].map(f => fetch('
 
   function render() {
     [...$('days').children].forEach((b, i) => b.classList.toggle('on', i === day));
-    $('mF').classList.toggle('on', mode === 'F'); $('mP').classList.toggle('on', mode === 'P');
-    const fc = F.fwi.map(f => fcls(f[day])), pc = fc.map((c, i) => pcls(c + hist[i]));
-    const col = i => mode === 'F' ? FWI_C[fc[i]][2] : PRI_C[pc[i]][1];
+    $('mF').classList.toggle('on', mode === 'F'); $('mP').classList.toggle('on', mode === 'P'); $('mM').classList.toggle('on', mode === 'M');
+    const fc = F.fwi.map(f => fcls(f[day])), pc = fc.map((c, i) => pcls(c + hist[i])), mc = hasML ? F.p.map((_, i) => mcls(ratio(i, day))) : [];
+    const col = i => mode === 'F' ? FWI_C[fc[i]][2] : mode === 'P' ? PRI_C[pc[i]][1] : ML_C[mc[i]][2];
     for (let i = 0; i < n; i++) map.setFeatureState({source:'com', id:i}, {c: col(i)});
-    const classes = mode === 'F' ? FWI_C.map(c => [c[1], c[2]]) : PRI_C, k = mode === 'F' ? fc : pc;
+    const classes = mode === 'F' ? FWI_C.map(c => [c[1], c[2]]) : mode === 'P' ? PRI_C : ML_C.map(c => [c[1], c[2]]), k = mode === 'F' ? fc : mode === 'P' ? pc : mc;
     $('leg').innerHTML = classes.map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('');
     $('dist').innerHTML = classes.map(([l, c], j) => { const m = k.filter(x => x === j).length; return m ? `<i style="width:${m / n * 100}%;background:${c}" title="${l}: ${m}"></i>` : ''; }).join('');
-    const order = [...Array(n).keys()].sort((a, b) => mode === 'F' ? F.fwi[b][day] - F.fwi[a][day] : (pc[b] - pc[a]) || (F.fwi[b][day] - F.fwi[a][day]));
-    $('topT').textContent = mode === 'F' ? 'Comuni con pericolo più alto' : 'Comuni con priorità più alta';
-    $('top').innerHTML = order.slice(0, 10).map(i => `<li data-i="${i}"><span>${C[i][0]} <small style="color:var(--mut)">${C[i][1]}</small></span>`
-      + (mode === 'F' ? `<span class="tag" style="background:${FWI_C[fc[i]][2]}">${Math.round(F.fwi[i][day])}</span>` : `<span class="tag" style="background:${PRI_C[pc[i]][1]}">${PRI_C[pc[i]][0]}</span>`) + '</li>').join('');
+    const order = [...Array(n).keys()].sort((a, b) => mode === 'F' ? F.fwi[b][day] - F.fwi[a][day] : mode === 'M' ? F.p[b][day] - F.p[a][day] : (pc[b] - pc[a]) || (F.fwi[b][day] - F.fwi[a][day]));
+    $('topT').textContent = mode === 'F' ? 'Comuni con pericolo più alto' : mode === 'M' ? 'Comuni con probabilità più alta' : 'Comuni con priorità più alta';
+    const tag = i => mode === 'F' ? `<span class="tag" style="background:${FWI_C[fc[i]][2]}">${Math.round(F.fwi[i][day])}</span>`
+      : mode === 'M' ? `<span class="tag" style="background:${ML_C[mc[i]][2]}">×${ratio(i, day).toFixed(1).replace('.', ',')}</span>`
+      : `<span class="tag" style="background:${PRI_C[pc[i]][1]}">${PRI_C[pc[i]][0]}</span>`;
+    $('top').innerHTML = order.slice(0, 10).map(i => `<li data-i="${i}"><span>${C[i][0]} <small style="color:var(--mut)">${C[i][1]}</small></span>${tag(i)}</li>`).join('');
     if (sel >= 0) show(sel);
   }
   function show(i) {
@@ -108,6 +133,7 @@ Promise.all(['forecast.json', 'history.json', 'comuni.geojson'].map(f => fetch('
     $('cName').textContent = C[i][0]; $('cSub').textContent = `Provincia ${C[i][1]} · ${dayFmt(F.days[day])}`;
     $('cF').textContent = Math.round(v); $('cFc').textContent = FWI_C[fc][1]; $('cFc').style.background = FWI_C[fc][2];
     $('cP').textContent = 'Priorità ' + PRI_C[pc][0].toLowerCase(); $('cP').style.background = PRI_C[pc][1];
+    $('cM').innerHTML = hasML ? `Modello ML: probabilità di innesco <b>${(F.p[i][day] * 100).toLocaleString('it-IT', {maximumFractionDigits:1})}%</b> · <b>×${ratio(i, day).toFixed(1).replace('.', ',')}</b> la media siciliana` : '';
     $('cT').textContent = F.tmax[i][day] + '°'; $('cRH').textContent = F.rhmin[i][day] + '%'; $('cW').textContent = F.wmax[i][day] + ' km/h';
     $('cHist').textContent = `Propensione storica ${HIST_L[hist[i]]}: ${C[i][4]} inneschi stimati e incendi in ${C[i][3].filter(x => x).length} anni su 25 (2001–2025).`;
     $('cLink').href = 'storico.html?c=' + i; $('card').style.display = 'block';
@@ -119,7 +145,7 @@ Promise.all(['forecast.json', 'history.json', 'comuni.geojson'].map(f => fetch('
       g.fillStyle = '#8d8a85'; g.fillText(j ? dayFmt(F.days[j]).split(' ')[0] : 'oggi', j * bw + bw / 2, h - 1); });
   }
   $('days').onclick = e => { const b = e.target.closest('button'); if (b) { day = +b.dataset.i; render(); } };
-  $('mF').onclick = () => { mode = 'F'; render(); }; $('mP').onclick = () => { mode = 'P'; render(); };
+  $('mF').onclick = () => { mode = 'F'; render(); }; $('mP').onclick = () => { mode = 'P'; render(); }; $('mM').onclick = () => { mode = 'M'; render(); };
   $('top').onclick = e => { const li = e.target.closest('li'); if (li) show(+li.dataset.i); };
   map.on('click', 'fill', e => show(e.features[0].id));
   map.on('mouseenter', 'fill', () => map.getCanvas().style.cursor = 'pointer');

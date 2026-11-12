@@ -24,7 +24,20 @@ Prima tappa: **replay degli incendi del 22–28 luglio 2023** (Palermo, 24–25 
 ## Rischio previsto (`rischio.html`)
 - **Pericolo meteo:** FWI per ognuno dei 391 comuni, oggi e i 6 giorni successivi, ricalcolato **ogni mattina** in automatico da GitHub Actions (`scripts/forecast.py`).
 - **Priorità:** pericolo meteo + propensione storica del comune. Formula trasparente, spiegata nella pagina.
+- **Modello ML:** probabilità di innesco per comune e giorno, espressa come multiplo della media siciliana.
 - Scheda comune con temperatura, umidità, vento e collegamento alla scheda storica.
+
+### Modello ML (`scripts/model.py`)
+Gradient boosting (scikit-learn) su 1,7 milioni di righe comune × giorno, 2014–2025. Input: meteo giornaliero ERA5 e indici FWI, quota, superficie, densità abitativa, storico degli inneschi **solo degli anni precedenti**, calendario. Etichetta: innesco MODIS stimato (nessun focolaio entro 2 km nei 3 giorni prima). Addestrato su 2014–2021, valutato su anni mai visti 2022–2025:
+
+| Metodo | AUROC | AUPRC | Inneschi nel 10% più a rischio |
+|---|---|---|---|
+| **Modello ML** | **0,92** | **0,077** | **75%** |
+| Priorità (FWI + storico) | 0,87 | 0,040 | 57% |
+| Solo storico comune | 0,83 | 0,022 | 49% |
+| Solo FWI | 0,84 | 0,021 | 47% |
+
+Variabili più importanti: storico del comune, periodo dell'anno, temperatura massima, superficie, FFMC. Limiti: l'addestramento usa ERA5 su griglia di 50 km, la previsione usa dati previsionali al centroide del comune; MODIS non vede i piccoli incendi. La probabilità assoluta resta bassa (media 0,4% per comune al giorno): conta il confronto relativo.
 
 ## Rigenerare i dati
 ```bash
@@ -33,9 +46,11 @@ python3 scripts/prepare_data.py
 ```bash
 python3 scripts/analysis.py
 python3 scripts/history.py
+python3 scripts/fetch_era5.py   # ~1 h, limiti Open-Meteo
+python3 scripts/model.py       # richiede scikit-learn
 python3 scripts/forecast.py
 ```
-Scrivono `web/data/*.json`. Solo libreria standard Python. Il calcolo FWI (`scripts/fwi.py`) riproduce il caso di riferimento di Van Wagner.
+Scrivono `web/data/*.json`. Libreria standard Python, salvo `model.py` e la parte ML di `forecast.py` (scikit-learn). Il calcolo FWI (`scripts/fwi.py`) riproduce il caso di riferimento di Van Wagner.
 
 ## Vedere in locale
 ```bash
@@ -44,7 +59,7 @@ python3 -m http.server 8000 -d web
 
 ## Roadmap
 1. Analisi evento e storico (fatto) · dati live (prossimo)
-2. Rischio previsto FWI per comune (fatto) · modello machine learning su Mesogeos (prossimo)
+2. Rischio previsto FWI per comune (fatto) · modello machine learning (fatto)
 3. Simulatore di propagazione interattivo
 
 ## Limiti

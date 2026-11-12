@@ -1,0 +1,132 @@
+{
+ "features": [
+  "tmax",
+  "rhmin",
+  "wmax",
+  "prec",
+  "ffmc",
+  "dmc",
+  "dc",
+  "isi",
+  "bui",
+  "fwi",
+  "dry_days",
+  "lat",
+  "lon",
+  "elev",
+  "area_km2",
+  "log_dens",
+  "hist_rate",
+  "doy",
+  "weekday",
+  "festivo"
+ ],
+ "base_rate": 0.004142370574989511,
+ "train": "2014-2021",
+ "test": "2022-2025",
+ "n_test_ign": 2225,
+ "metrics": {
+  "Modello ML": {
+   "auroc": 0.922,
+   "auprc": 0.0765,
+   "top10": 0.753
+  },
+  "Solo FWI (meteo)": {
+   "auroc": 0.838,
+   "auprc": 0.0209,
+   "top10": 0.466
+  },
+  "Solo storico comune": {
+   "auroc": 0.829,
+   "auprc": 0.0217,
+   "top10": 0.493
+  },
+  "Priorit\u00e0 attuale (FWI + storico)": {
+   "auroc": 0.871,
+   "auprc": 0.0395,
+   "top10": 0.568
+  }
+ },
+ "importance": [
+  [
+   "hist_rate",
+   0.0629
+  ],
+  [
+   "doy",
+   0.04156
+  ],
+  [
+   "tmax",
+   0.02401
+  ],
+  [
+   "area_km2",
+   0.02339
+  ],
+  [
+   "ffmc",
+   0.01792
+  ],
+  [
+   "dc",
+   0.01572
+  ],
+  [
+   "lat",
+   0.00841
+  ],
+  [
+   "wmax",
+   0.00801
+  ],
+  [
+   "prec",
+   0.00784
+  ],
+  [
+   "lon",
+   0.00495
+  ],
+  [
+   "bui",
+   0.0036
+  ],
+  [
+   "isi",
+   0.00354
+  ],
+  [
+   "rhmin",
+   0.00313
+  ],
+  [
+   "fwi",
+   0.00298
+  ],
+  [
+   "elev",
+   0.00221
+  ],
+  [
+   "log_dens",
+   0.00158
+  ],
+  [
+   "dmc",
+   0.00055
+  ],
+  [
+   "festivo",
+   0.00024
+  ],
+  [
+   "dry_days",
+   -0.0001
+  ],
+  [
+   "weekday",
+   -0.0005
+  ]
+ ]
+}

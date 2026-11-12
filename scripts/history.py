@@ -60,7 +60,7 @@ if __name__ == "__main__":
     n = len(feats); Y = len(YEARS)
     per_year = [0] * Y; ign_year = [0] * Y; month = [0] * 12; wday = [0] * 7
     c_det = [[0] * Y for _ in range(n)]; c_ign = [0] * n
-    cells = defaultdict(lambda: [set(), 0]); last = {}
+    cells = defaultdict(lambda: [set(), 0]); last = {}; ign_list = []
     for d, lon, lat, c in det:
         dt = date.fromisoformat(d); yi = dt.year - YEARS[0]
         per_year[yi] += 1; c_det[c][yi] += 1
@@ -68,13 +68,14 @@ if __name__ == "__main__":
         gx, gy = int(lon // CELL), int(lat // CELL)
         near = [last.get((gx + i, gy + j)) for i in (-1, 0, 1) for j in (-1, 0, 1)]
         if not any(x and dt - x <= timedelta(days=GAP_DAYS) for x in near):
-            ign_year[yi] += 1; month[dt.month - 1] += 1; wday[dt.weekday()] += 1; c_ign[c] += 1
+            ign_list.append((d, c)); ign_year[yi] += 1; month[dt.month - 1] += 1; wday[dt.weekday()] += 1; c_ign[c] += 1
         last[(gx, gy)] = dt
     com = [[f["properties"]["name"], f["properties"].get("prov_acr", ""), pop.get(str(f["properties"]["com_istat_code"]).zfill(6)),
             c_det[i], c_ign[i]] for i, f in enumerate(feats)]
     json.dump({"years": YEARS, "det": per_year, "ign": ign_year, "month": month, "wday": wday, "comuni": com,
                "cells": [[round(k[0], 2), round(k[1], 2), len(v[0]), v[1]] for k, v in cells.items()]},
               open(f"{OUT}/history.json", "w"), separators=(",", ":"))
+    csv.writer(open(f"{RAW}/ignitions.csv", "w")).writerows(ign_list)
     gj = {"type": "FeatureCollection", "features": [{"type": "Feature", "id": i, "properties": {},
           "geometry": {"type": "MultiPolygon", "coordinates": [[simplify(r)] for r in rings]}} for i, (rings, _) in enumerate(polys)]}
     json.dump(gj, open(f"{OUT}/comuni.geojson", "w"), separators=(",", ":"))
