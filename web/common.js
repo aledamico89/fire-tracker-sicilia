@@ -8,7 +8,19 @@
     const foot = document.createElement('div'); foot.className = 'ft-foot';
     foot.innerHTML = `© 2026 <a href="https://alessiodamico.com" target="_blank" rel="noopener">Alessio D'Amico</a> · ideazione e design · ` +
       `<a href="https://alessiodamico.com" target="_blank" rel="noopener">alessiodamico.com</a><br>Codice open source <a href="https://github.com/aledamico89/fire-tracker-sicilia" target="_blank" rel="noopener">MIT</a> · dati © delle rispettive fonti`;
-    document.body.append(nav); (document.querySelector('#side') || document.body).append(foot);
+    document.body.append(nav);
+    // telefono: il pannello dati diventa una scheda dal basso (nella pagina evento è l'analisi; il pannello livelli resta in alto)
+    const ana = document.querySelector('#ana'), side = document.querySelector('#side'), sheet = ana || side, card = document.querySelector('#card'), bar = document.querySelector('#bar');
+    (sheet || document.body).append(foot);
+    if (ana && side) side.classList.add('ft-sheet-top');
+    const fit = () => document.body.style.setProperty('--ft-bottom', bar && matchMedia('(max-width:700px)').matches ? Math.round(innerHeight - bar.getBoundingClientRect().top + 6) + 'px' : '0px');
+    fit(); addEventListener('resize', fit);
+    if (sheet) { sheet.classList.add('ft-sheet'); if (ana) sheet.style.setProperty('--ft-peek', '120px');
+      const h = document.createElement('button'); h.className = 'ft-handle'; h.setAttribute('aria-label', 'Apri o chiudi il pannello dati');
+      h.onclick = () => sheet.classList.toggle('open'); sheet.prepend(h); }
+    if (card) { const x = document.createElement('button'); x.className = 'ft-close'; x.textContent = '× Torna alla mappa';
+      x.onclick = () => { typeof window.hide == 'function' ? window.hide() : card.style.display = 'none'; }; card.prepend(x);
+      new MutationObserver(() => { if (card.style.display == 'block') sheet?.classList.remove('open'); }).observe(card, {attributes:true, attributeFilter:['style']}); }
   });
 })();
 
@@ -30,6 +42,9 @@ window.FT = {
   },
   // dem: nome di una sorgente raster-dem già presente nella pagina (evita di scaricare due volte il rilievo)
   enhance(map, {dem = null, hill = true, buildings = true} = {}) {
+    // telefono: lo zoom su un'area lascia spazio alla scheda in basso
+    const fb = map.fitBounds.bind(map), mq = matchMedia('(max-width:700px)');
+    map.fitBounds = (b, o = {}) => fb(b, mq.matches ? {...o, padding:{top:60, bottom:Math.round(innerHeight * .6), left:24, right:24}} : o);
     const go = () => {
       const below = map.getStyle().layers[1]?.id;
       if (!dem) { dem = 'ft-dem'; map.addSource(dem, {type:'raster-dem', encoding:'terrarium', tileSize:256, maxzoom:14, tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']}); }
