@@ -3,153 +3,368 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Catasto Incendi</title>
+<title>Dopo l'Incendio</title>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/proj4@2.9.2/dist/proj4.js"></script>
+<script src="https://unpkg.com/geotiff@2.1.3/dist-browser/geotiff.js"></script>
 <style>
-:root{--bg:#0e0f11;--panel:rgba(18,19,22,.92);--line:#2a2c31;--txt:#e9e6e1;--mut:#8d8a85;--fire:#ff6a00;--hot:#ffd166}
-*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,-apple-system,sans-serif}
+:root{--bg:#0e0f11;--panel:rgba(18,19,22,.94);--line:#2a2c31;--txt:#e9e6e1;--mut:#8d8a85;--fire:#ff6a00;--hot:#ffd166;--ok:#7cb342;--bad:#e53935}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:14px/1.45 system-ui,-apple-system,sans-serif}
 #map{position:fixed;inset:0}
 .panel{position:fixed;background:var(--panel);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow:auto}
-#side{top:16px;left:16px;bottom:16px;width:340px}#card{top:16px;right:56px;width:330px;max-height:calc(100vh - 32px);display:none}
+#side{top:16px;left:16px;bottom:16px;width:390px}#card{top:16px;right:56px;bottom:16px;width:400px;display:none}
 h1{font-size:16px;margin:0 0 2px}h1 span{color:var(--fire)}nav{font-size:12px;margin-bottom:10px}nav a{color:var(--mut);text-decoration:none;margin-right:10px}nav a.on{color:var(--txt);border-bottom:2px solid var(--fire)}
-h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:14px 0 6px;font-weight:600}
-.sub{color:var(--mut);font-size:12px}
-.kv{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}.kv b{display:block;font-size:20px;font-variant-numeric:tabular-nums}.kv small{color:var(--mut);font-size:11px}
-.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:var(--mut);margin-top:8px}.legend span{display:flex;align-items:center;gap:4px}.legend i{width:10px;height:10px;border-radius:2px}
-label.chk{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--mut);margin-top:8px;cursor:pointer}
-#list{list-style:none;margin:0;padding:0}#list li{display:grid;grid-template-columns:26px 1fr auto;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:12px}#list li:hover{color:var(--hot)}
-#list .n{color:var(--mut)}.tag{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:600;color:#000}
-.v{background:#ff6a00}.nv{background:#444;color:#ccc}
-.btns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.btns a,.btns button{flex:1;text-align:center;text-decoration:none;background:#2a2c31;color:var(--txt);border:0;border-radius:8px;padding:8px 6px;cursor:pointer;font:inherit;font-size:12px;white-space:nowrap}.btns a:hover,.btns button:hover{background:#3a3c42}
-#card h3{font-size:20px;margin:0}
-table{width:100%;border-collapse:collapse;font-size:12px}td{padding:3px 0;border-bottom:1px solid var(--line)}td:last-child{text-align:right;font-variant-numeric:tabular-nums}
-.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:6px 0}.bar i{display:block}
-a{color:var(--hot)}details{margin-top:12px;color:var(--mut);font-size:12px}summary{cursor:pointer;color:var(--txt)}
-.parc{max-height:140px;overflow:auto;font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
-.x{position:absolute;top:8px;right:10px;background:none;border:0;color:var(--mut);font-size:18px;cursor:pointer}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:18px 0 8px;font-weight:600}
+.sub{color:var(--mut);font-size:12px}.lead{font-size:15px;line-height:1.5;margin:8px 0 4px}.lead b{color:var(--hot)}
+.tabs{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:10px 0 4px}.tabs button{flex:1;background:none;border:0;color:var(--mut);padding:7px;cursor:pointer;font:inherit;font-size:12px}.tabs button.on{background:#2a2c31;color:var(--txt)}
+.kpi{display:grid;grid-template-columns:1fr 1fr;gap:8px}.kpi div{background:#1a1b1f;border:1px solid var(--line);border-radius:8px;padding:8px 10px}.kpi b{display:block;font-size:19px;font-variant-numeric:tabular-nums;line-height:1.2}.kpi small{color:var(--mut);font-size:11px;display:block}
+canvas.ch{width:100%;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:var(--mut);margin-top:6px}.legend span{display:flex;align-items:center;gap:4px}.legend i{width:10px;height:10px;border-radius:2px}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:6px 0}.bar i{display:block}
+.todo{list-style:none;margin:0;padding:0;counter-reset:t}.todo li{counter-increment:t;position:relative;padding:6px 0 6px 28px;border-bottom:1px solid var(--line);font-size:13px}.todo li::before{content:counter(t);position:absolute;left:0;top:7px;width:20px;height:20px;border-radius:50%;background:var(--fire);color:#000;font-size:11px;font-weight:700;display:grid;place-items:center}.todo small{display:block;color:var(--mut);font-size:11px}
+.plan li{cursor:pointer}.plan li:hover{color:var(--hot)}
+#list{list-style:none;margin:0;padding:0}#list li{display:grid;grid-template-columns:26px 1fr auto;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:12px}#list li:hover{color:var(--hot)}#list .n{color:var(--mut)}
+.tag{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:600;color:#000;white-space:nowrap}.pA{background:var(--bad);color:#fff}.pM{background:var(--fire)}.pB{background:#555;color:#ddd}
+label.chk{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--mut);margin:6px 0;cursor:pointer}
+.btns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.btns a,.btns button,button.big{flex:1;text-align:center;text-decoration:none;background:#2a2c31;color:var(--txt);border:0;border-radius:8px;padding:8px 6px;cursor:pointer;font:inherit;font-size:12px;white-space:nowrap}.btns a:hover,.btns button:hover{background:#3a3c42}
+button.big{display:block;width:100%;background:var(--fire);color:#000;font-weight:600;padding:10px;margin-top:10px}
+#card h3{font-size:20px;margin:0}.story{font-size:14px;line-height:1.55}.story p{margin:0 0 8px}
+table{width:100%;border-collapse:collapse;font-size:12px}td{padding:4px 0;border-bottom:1px solid var(--line);vertical-align:top}td:last-child{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;padding-left:8px}
+.risk{display:grid;grid-template-columns:1fr 1fr;gap:6px}.risk div{border-radius:8px;padding:6px 8px;font-size:12px;background:#1a1b1f;border-left:3px solid #555}.risk .hi{border-color:var(--bad)}.risk .me{border-color:var(--fire)}.risk .lo{border-color:var(--ok)}.risk b{display:block;font-size:11px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+a{color:var(--hot)}details{margin-top:10px;color:var(--mut);font-size:12px}summary{cursor:pointer;color:var(--txt)}
+.parc{max-height:120px;overflow:auto;font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
+.x{position:absolute;top:8px;right:10px;background:none;border:0;color:var(--mut);font-size:20px;cursor:pointer}
+.note{font-size:11px;color:var(--mut);margin-top:6px}
+#vw{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;z-index:10;flex-direction:column;padding:16px}
+#vw header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}#vw header h3{margin:0;font-size:16px;flex:1}
+#cmp{position:relative;flex:1;overflow:hidden;display:grid;place-items:center;cursor:ew-resize;user-select:none}
+#cmp canvas{position:absolute}#cA{clip-path:inset(0 50% 0 0)}
+#sl{position:absolute;top:0;bottom:0;width:2px;background:#fff;left:50%;pointer-events:none;box-shadow:0 0 6px #000}
+.lbl{position:absolute;top:10px;background:rgba(0,0,0,.6);padding:3px 8px;border-radius:6px;font-size:12px}
+#vw footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}#vw footer .grp{display:flex;gap:4px;align-items:center;background:#1a1b1f;border-radius:8px;padding:4px 6px;font-size:12px}
+#vw button{background:#2a2c31;color:var(--txt);border:0;border-radius:6px;padding:6px 10px;cursor:pointer;font:inherit;font-size:12px}#vw button:hover{background:#3a3c42}
+#vst{color:var(--mut);font-size:12px}
 #print{display:none}
-@media(max-width:640px){#side{bottom:auto;right:16px;width:auto;max-height:45vh}#card{left:16px;right:16px;top:auto;bottom:16px;width:auto;max-height:50vh}}
-@media print{#map,#side,#card{display:none!important}body{background:#fff;color:#000;font-size:11px}#print{display:block;padding:10mm}#print table{font-size:10px}#print td,#print th{border:1px solid #999;padding:3px 5px;text-align:left}#print h1{font-size:16px}}
+@media(max-width:700px){#side{bottom:auto;right:16px;width:auto;max-height:50vh}#card{left:8px;right:8px;top:30vh;bottom:8px;width:auto}}
+@media print{#map,#side,#card,#vw{display:none!important}body{background:#fff;color:#000;font-size:11px}#print{display:block;padding:10mm}#print td,#print th{border:1px solid #999;padding:3px 5px;text-align:left}#print h1{font-size:16px}}
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="side" class="panel">
   <h1>Fire Tracker <span>Sicilia</span></h1>
-  <nav><a href="./">Evento 2023</a><a href="storico.html">Storico</a><a href="rischio.html">Rischio previsto</a><a class="on" href="catasto.html">Catasto incendi</a></nav>
+  <nav><a href="./">Evento 2023</a><a href="storico.html">Storico</a><a href="rischio.html">Rischio</a><a class="on" href="catasto.html">Dopo l'incendio</a></nav>
   <div class="sub" id="head"></div>
-  <div class="kv"><div><b id="kN">–</b><small>aree bruciate</small></div><div><b id="kH">–</b><small>ettari</small></div><div><b id="kV">–</b><small>ha con vincoli</small></div></div>
-  <div class="legend" id="leg"></div>
-  <label class="chk"><input type="checkbox" id="onlyV"> Solo aree soggette a vincolo (boschi e pascoli)</label>
-  <div class="btns"><button id="bCsv">Elenco particelle (CSV)</button><button id="bGeo">Perimetri (GeoJSON)</button><button onclick="print()">Stampa</button></div>
-  <h2>Aree, dalla più estesa</h2><ul id="list"></ul>
-  <details><summary>Cosa dice la legge</summary>
-    <p>La legge 353/2000 (art. 10) obbliga i comuni a censire ogni anno le aree percorse dal fuoco, con l'aiuto dei rilievi del Corpo Forestale, e a pubblicarle all'albo pretorio. Su <b>boschi e pascoli</b> bruciati scattano vincoli:</p>
-    <p>• <b>15 anni:</b> la destinazione d'uso non può cambiare.<br>• <b>10 anni:</b> vietato costruire edifici e infrastrutture; vietati pascolo e caccia.<br>• <b>5 anni:</b> vietati rimboschimenti con fondi pubblici senza autorizzazione.</p>
-    <p>I vincoli disincentivano gli incendi dolosi legati a speculazione edilizia e pascolo: senza un catasto aggiornato non sono applicabili.</p>
-  </details>
-  <details><summary>Metodo e limiti</summary>
-    <p>Per ogni incendio rilevato dai satelliti MODIS e VIIRS (NASA FIRMS) confrontiamo le immagini Sentinel-2 prima e dopo il fuoco. L'indice dNBR misura la perdita di vegetazione: sopra <span id="mTh"></span> il pixel (20 m) è considerato bruciato. Teniamo solo le aree entro <span id="mD"></span> m da un focolaio e più grandi di <span id="mA"></span> ha, per escludere mietiture e arature. Da settembre, su coltivi e prati, servono criteri più severi e le aree restano "da verificare": le arature autunnali scuriscono i campi come il fuoco.</p>
-    <p>Copertura del suolo: ESA WorldCover 2021 (10 m). Un'area è "soggetta a vincolo" se almeno metà è bosco, arbusteto o prato/pascolo. Particelle: servizio INSPIRE dell'Agenzia delle Entrate, un punto ogni 50 m.</p>
-    <p><b>È una bozza tecnica</b>: gli incendi piccoli o non visti dal satellite mancano, i bordi hanno un margine di circa 20 m e le particelle sul bordo vanno verificate. Va validata dall'ufficio tecnico con i rilievi del Corpo Forestale prima dell'approvazione.</p>
-  </details>
+  <div class="tabs"><button data-t="tD" class="on">Panoramica</button><button data-t="tA">Aree</button><button data-t="tM">Metodo e fonti</button></div>
+
+  <div id="tD">
+    <p class="lead" id="lead"></p>
+    <div class="kpi" id="kpi"></div>
+    <h2>Cosa deve fare il Comune</h2><ol class="todo" id="todo"></ol>
+    <h2>Priorità di intervento</h2><ol class="todo plan" id="plan"></ol>
+    <h2>Quando ha bruciato (ettari per mese)</h2><canvas class="ch" id="chM" height="90"></canvas>
+    <h2>Cosa ha bruciato</h2><div class="bar" id="lcBar"></div><div class="legend" id="lcLeg"></div>
+    <h2>Rilevamenti satellitari nel comune, 2001–2025</h2><canvas class="ch" id="chY" height="80"></canvas><div class="note" id="yNote"></div>
+    <h2>Documenti</h2>
+    <div class="btns"><button id="bCsv">Elenco particelle (CSV)</button><button id="bGeo">Perimetri (GeoJSON)</button><button onclick="print()">Stampa per l'albo</button></div>
+  </div>
+
+  <div id="tA" hidden>
+    <label class="chk"><input type="checkbox" id="onlyV"> Solo boschi e pascoli (soggetti a vincolo)</label>
+    <label class="chk"><input type="checkbox" id="onlyP"> Solo priorità alta</label>
+    <div class="legend" id="leg"></div>
+    <ul id="list"></ul>
+  </div>
+
+  <div id="tM" hidden>
+    <details open><summary>Cosa dice la legge</summary>
+      <p>La legge 353/2000 (art. 10) obbliga i comuni a censire ogni anno le aree percorse dal fuoco e a pubblicarle all'albo pretorio. Su <b>boschi e pascoli</b> bruciati: 15 anni di destinazione d'uso immutabile; 10 anni di divieto di costruire, pascolare e cacciare; 5 anni senza rimboschimenti con fondi pubblici non autorizzati. Senza catasto aggiornato i vincoli, che servono a scoraggiare gli incendi dolosi, non si applicano.</p></details>
+    <details><summary>Come troviamo le aree bruciate</summary>
+      <p>Per ogni incendio rilevato dai satelliti MODIS e VIIRS (NASA FIRMS) confrontiamo le immagini Sentinel-2 prima e dopo. L'indice dNBR misura la perdita di vegetazione: oltre <span id="mTh"></span> il pixel di 20 m è bruciato. Solo pixel entro <span id="mD"></span> m da un focolaio, aree di almeno <span id="mA"></span> ha. Da settembre, su coltivi e prati, criteri più severi e marcatura "da verificare" (le arature somigliano al fuoco).</p></details>
+    <details><summary>Impatto: dati usati</summary>
+      <p>Pendenze: Copernicus DEM 30 m. Edifici e strade: OpenStreetMap. Aree protette: Natura 2000 (EEA). Copertura del suolo: ESA WorldCover 2021. Particelle: servizio INSPIRE dell'Agenzia delle Entrate.</p></details>
+    <details open><summary>Stime di costo: parametri e affidabilità</summary>
+      <table id="pTab"></table>
+      <p>Le stime economiche sono <b>ordini di grandezza</b> per orientare le priorità, non perizie. I prezzi vanno sostituiti con il prezzario regionale vigente e i sopralluoghi.</p></details>
+    <details><summary>Limiti</summary>
+      <p>Incendi piccoli o non visti dal satellite mancano; i bordi hanno un margine di circa 20 m; le particelle sul bordo vanno verificate. La bozza va validata dall'ufficio tecnico con i rilievi del Corpo Forestale prima dell'approvazione.</p></details>
+  </div>
 </div>
+
 <div id="card" class="panel"><button class="x" onclick="hide()">×</button><div id="cb"></div></div>
+
+<div id="vw">
+  <header><h3 id="vT"></h3><span id="vst"></span><button onclick="$('vw').style.display='none'">Chiudi ×</button></header>
+  <div id="cmp"><canvas id="cB"></canvas><canvas id="cA"></canvas><div id="sl"></div><span class="lbl" id="lA" style="left:10px"></span><span class="lbl" id="lB" style="right:10px"></span></div>
+  <footer>
+    <div class="grp">Prima <button onclick="step('pre',1)">◀</button><span id="dA"></span><button onclick="step('pre',-1)">▶</button><button onclick="save('cA','prima')">Scarica</button><button onclick="tab('cA')">Apri</button></div>
+    <div class="grp">Dopo <button onclick="step('post',-1)">◀</button><span id="dB"></span><button onclick="step('post',1)">▶</button><button onclick="save('cB','dopo')">Scarica</button><button onclick="tab('cB')">Apri</button></div>
+    <span class="note">Sentinel-2, colori reali, 10 m per pixel. Si scarica solo il riquadro dell'area. Trascina per confrontare.</span>
+  </footer>
+</div>
 <div id="print"></div>
+
 <script>
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search), C = Q.get('c') || 'monreale', Y = Q.get('y') || '2023';
 const GR = [['bassa','#ffd166'],['medio-bassa','#ff9f1c'],['medio-alta','#ff6a00'],['alta','#d62828']];
-const LC = {10:['Bosco','#2e7d32'],20:['Arbusteto','#8d9b3a'],30:['Prato/pascolo','#c5b358'],40:['Coltivi','#e0a96d'],50:['Edificato','#9e9e9e'],60:['Suolo nudo','#bcaaa4'],80:['Acqua','#4fc3f7'],90:['Zona umida','#4db6ac']};
-const fmt = (n, d = 0) => n.toLocaleString('it-IT', {maximumFractionDigits: d, minimumFractionDigits: d});
+const GR_TXT = {'bassa':'la vegetazione è stata colpita in superficie e ricrescerà in fretta', 'medio-bassa':'il fuoco ha bruciato erba e arbusti, parte delle piante resterà viva',
+  'medio-alta':'gran parte della vegetazione è morta, il suolo è rimasto in buona parte scoperto', 'alta':'la vegetazione è stata distrutta quasi del tutto e il suolo è nudo'};
+const LC = {10:['Bosco','#2e7d32'],20:['Arbusteto e macchia','#8d9b3a'],30:['Prato e pascolo','#c5b358'],40:['Coltivi','#e0a96d'],50:['Edificato','#9e9e9e'],60:['Suolo nudo','#bcaaa4'],80:['Acqua','#4fc3f7'],90:['Zona umida','#4db6ac']};
+// Parametri di stima: [basso, alto], unità, fonte, affidabilità. Modificabili.
+const PAR = {
+  biomassa: {10:[20,40], 20:[10,25], 30:[2,5], 40:[2,4], u:'t di sostanza secca bruciata per ha', f:'IPCC 2006/2019, Vol. 4, Tab. 2.4; studi mediterranei (MediNet 2018)', a:'media'},
+  co2: {v:1.6, u:'t CO₂ per t bruciata', f:'Andreae 2019, Atmos. Chem. Phys. 19, 8523', a:'alta'},
+  auto: {v:1.5, u:'t CO₂ per auto all\'anno', f:'auto media italiana, ~11.000 km a 135 g/km', a:'media'},
+  danno: {v:[4000, 10000], u:'€/ha di bosco e macchia', f:'basso: costo di ricostituzione (prezzario forestazione Emilia-Romagna 2015); alto: stima Coldiretti 2017 (spegnimento, bonifica, ripristino)', a:'bassa'},
+  rimbo: {v:[4000, 6400], u:'€/ha rimboschimento', f:'prezzario forestazione Emilia-Romagna 2015 (1.500 piante/ha)', a:'media'},
+  versanti: {v:[1340, 3350], u:'€/ha di versante ripido trattato', f:'mulching e fascinate 0,67 €/m² (prezzario MiTE) sul 20–50% della superficie: interventi mirati su impluvi e sopra case e strade', a:'bassa'},
+  pulizia: {v:[800, 1500], u:'€/ha decespugliamento fascia 200 m', f:'stima indicativa da prezzari regionali (voce ripulitura terreni cespugliati)', a:'bassa'},
+  canadair: {v:[13000, 15000], u:'€ per ora di volo Canadair', f:'stampa nazionale (servizio completo)', a:'bassa'},
+  elicottero: {v:[5296, 5296], u:'€ per ora di elicottero (IVA inclusa)', f:'Regione Siciliana, analisi prezzi 2024', a:'alta'}};
+const fmt = (n, d = 0) => (+n).toLocaleString('it-IT', {maximumFractionDigits: d, minimumFractionDigits: d});
+const eur = ([a, b]) => b < 1e5 ? `${fmt(a / 1e3, 0)}–${fmt(b / 1e3, 0)} mila €` : `${fmt(a / 1e6, 1)}–${fmt(b / 1e6, 1)} mln €`;
 const dt = s => s.split('-').reverse().join('/');
+const MESI = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+const dTxt = s => `${+s.slice(8)} ${['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'][+s.slice(5, 7) - 1]}`;
 const plus = (s, y) => dt((+s.slice(0, 4) + y) + s.slice(4));
+const day = (s, n) => { const x = new Date(s); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+const UTM = '+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs';
+const coords = g => g.type == 'Polygon' ? g.coordinates.flat() : g.coordinates.flat(2);
+const bbox = g => { const c = coords(g); return [Math.min(...c.map(p => p[0])), Math.min(...c.map(p => p[1])), Math.max(...c.map(p => p[0])), Math.max(...c.map(p => p[1]))]; };
+const areaHa = g => (g.type == 'Polygon' ? [g.coordinates] : g.coordinates).reduce((s, pol) => s + pol.reduce((t, r, i) => {
+  const k = 111320 * Math.cos(r[0][1] * Math.PI / 180); let a = 0; for (let j = 0; j < r.length - 1; j++) a += r[j][0] * k * r[j + 1][1] * 111320 - r[j + 1][0] * k * r[j][1] * 111320; return t + (i ? -1 : 1) * Math.abs(a / 2); }, 0), 0) / 1e4;
+
 const map = new maplibregl.Map({container:'map', center:[13.2, 37.95], zoom:10.5, style:{version:8, sources:{
-  sat:{type:'raster', tileSize:256, maxzoom:15, attribution:'Sentinel-2 cloudless 2020 © EOX · Copernicus · NASA FIRMS · ESA WorldCover · Agenzia Entrate', tiles:['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg']}},
+  sat:{type:'raster', tileSize:256, maxzoom:15, attribution:'Sentinel-2 cloudless 2020 © EOX · Copernicus · NASA FIRMS · ESA WorldCover · OpenStreetMap · Agenzia Entrate · EEA', tiles:['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg']}},
   layers:[{id:'sat', type:'raster', source:'sat', paint:{'raster-brightness-max':.6, 'raster-saturation':-.5}}]}});
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 new ResizeObserver(() => map.resize()).observe($('map'));
-let D, sel = null;
-$('leg').innerHTML = GR.map(g => `<span><i style="background:${g[1]}"></i>${g[0]}</span>`).join('') + '<span><i style="border:2px solid #fff"></i>con vincolo</span>';
+let D, I = {}, A = [], sel = null;
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x == b));
+  ['tD', 'tA', 'tM'].forEach(t => $(t).hidden = t != b.dataset.t); });
 
-Promise.all([fetch(`data/catasto_${C}_${Y}.json`).then(r => r.json()), new Promise(r => map.on('load', r))]).then(([d]) => {
-  D = d; const F = d.features, P = f => f.properties;
-  document.title = `Catasto Incendi ${d.comune} ${d.anno}`;
-  $('head').innerHTML = `<b style="color:var(--txt);font-size:15px">${d.comune} · ${d.anno}</b> — bozza di catasto delle aree percorse dal fuoco`;
-  $('kN').textContent = F.length;
-  $('kH').textContent = fmt(F.reduce((s, f) => s + P(f).ha, 0));
-  $('kV').textContent = fmt(F.filter(f => P(f).vincolo).reduce((s, f) => s + P(f).ha, 0));
+// ---------- stima per area ----------
+function est(p, im) {
+  const lc = k => (p.lc[k] || 0) * p.ha, nat = lc(10) + lc(20) + lc(30);
+  const sev = {bassa:.25, 'medio-bassa':.5, 'medio-alta':.8, alta:1}[p.gravita];
+  const bio = [0, 1].map(i => [10, 20, 30, 40].reduce((s, k) => s + lc(k) * PAR.biomassa[k][i], 0) * Math.max(sev, .4));
+  const co2 = bio.map(b => b * PAR.co2.v);
+  const ripidi = p.ha * (im?.pend_ripida_pct || 0), urg = ripidi * sev;
+  const nb = im ? im.edifici_dentro + im.edifici_200m : 0;
+  const iv = [];
+  if (p.vincolo) iv.push({t:'Ordinanza: divieto di pascolo e caccia, avvio dei vincoli', q:`${fmt(p.ha, 1)} ha`, c:[0, 0], w:'subito', k:'adm'});
+  if (urg >= 1) iv.push({t:'Stabilizzazione dei versanti ripidi (fascine, palizzate, mulching)', q:`${fmt(urg, 1)} ha`, c:PAR.versanti.v.map(v => v * urg), w:'prima delle piogge autunnali', k:'urg'});
+  if (im?.strade_km > .2) iv.push({t:`Controllo strade: cunette, massi, alberi pericolanti (${im.strade.filter(n => !/^strade /.test(n)).concat(im.strade.filter(n => /^strade /.test(n))).slice(0, 3).join(', ')})`, q:`${fmt(im.strade_km, 1)} km`, c:null, w:'subito', k:'urg'});
+  if (nb > 0 && lc(10) > 1) iv.push({t:'Abbattimento alberi bruciati vicino a case e strade', q:`${nb} edifici vicini`, c:null, w:'entro 3 mesi', k:'urg'});
+  if (lc(10) >= 2 && sev >= .8) iv.push({t:'Ricostituzione del bosco (dopo 1–2 anni di osservazione)', q:`${fmt(lc(10), 1)} ha`, c:PAR.rimbo.v.map(v => v * lc(10)), w:'dal 2° anno', k:'rec'});
+  else if (nat >= 2) iv.push({t:'Rigenerazione naturale della macchia: monitoraggio, niente pascolo', q:`${fmt(nat, 1)} ha`, c:[0, 0], w:'2–3 anni', k:'rec'});
+  if (nb > 0) { const fascia = Math.min(nb * .8, p.ha * .5); iv.push({t:'Prevenzione: pulizia della fascia di 200 m attorno agli edifici', q:`${nb} edifici, ~${fmt(fascia, 0)} ha`, c:PAR.pulizia.v.map(v => v * fascia), w:'ogni anno entro giugno', k:'prev'}); }
+  if (im && Object.keys(im.natura2000).length) iv.push({t:'Coordinamento con l\'ente gestore del sito Natura 2000', q:Object.keys(im.natura2000).join(', '), c:[0, 0], w:'subito', k:'adm'});
+  const danno = PAR.danno.v.map(v => v * (lc(10) + lc(20)) * Math.max(sev, .4));
+  const costo = [0, 1].map(i => iv.reduce((s, x) => s + (x.c ? x.c[i] : 0), 0));
+  const score = urg * 2 + Math.min(nb, 50) * 1.5 + (im?.strade_km || 0) * 8 + (p.vincolo ? p.ha * .05 : 0) + (im && Object.keys(im.natura2000).length ? 10 : 0);
+  return {nat, sev, co2, ripidi, urg, nb, iv, danno, costo, score};
+}
+
+Promise.all([fetch(`data/catasto_${C}_${Y}.json`).then(r => r.json()), fetch(`data/impatto_${C}_${Y}.json`).then(r => r.ok ? r.json() : {aree:{}}).catch(() => ({aree:{}})),
+  fetch('data/history.json').then(r => r.json())]).then(([d, im, h]) => {
+  D = d; I = im.aree;
+  D.features.forEach(f => { f.properties.E = est(f.properties, I[f.properties.id]); });
+  const sc = D.features.map(f => f.properties.E.score).sort((a, b) => b - a);
+  const tA = sc[Math.min(9, sc.length - 1)], tM = sc[Math.min(39, sc.length - 1)];
+  D.features.forEach(f => { const s = f.properties.E.score; f.properties.prio = s >= tA && s > 5 ? 'alta' : s >= tM && s > 2 ? 'media' : 'bassa'; });
+  A = D.features.map(f => f.properties);
+  document.title = `Dopo l'Incendio — ${d.comune} ${d.anno}`;
+  $('head').innerHTML = `<b style="color:var(--txt);font-size:15px">${d.comune} · ${d.anno}</b> — cosa ha bruciato, che danni ha fatto, cosa fare ora`;
+  dashboard(h);
   $('mTh').textContent = d.metodo.soglia_dnbr; $('mD').textContent = d.metodo.dist_focolaio_m; $('mA').textContent = fmt(d.metodo.area_min_ha, 1);
+  $('pTab').innerHTML = Object.entries(PAR).map(([k, p]) => `<tr><td>${p.u}<br><span style="color:var(--mut)">${p.f}</span></td><td>${p.v ? (Array.isArray(p.v) ? p.v.map(x => fmt(x)).join('–') : fmt(p.v, 1)) : 'per classe'}<br><span class="tag ${p.a == 'alta' ? 'pB' : p.a == 'media' ? 'pM' : 'pA'}">${p.a}</span></td></tr>`).join('');
+  $('onlyV').onchange = $('onlyP').onchange = list; list(); printable();
+  const layers = () => {
   map.addSource('conf', {type:'geojson', data:{type:'Feature', geometry:d.confine}});
   map.addSource('a', {type:'geojson', data:d, promoteId:'id'});
   map.addLayer({id:'conf', type:'line', source:'conf', paint:{'line-color':'#fff', 'line-width':1.5, 'line-dasharray':[3, 2], 'line-opacity':.7}});
   map.addLayer({id:'af', type:'fill', source:'a', paint:{'fill-color':['match', ['get', 'gravita'], ...GR.flat(), '#999'], 'fill-opacity':['case', ['boolean', ['feature-state', 'sel'], false], .95, ['get', 'vincolo'], .75, .4]}});
   map.addLayer({id:'al', type:'line', source:'a', paint:{'line-color':['case', ['boolean', ['feature-state', 'sel'], false], '#00e5ff', ['get', 'vincolo'], '#fff', 'rgba(255,255,255,.35)'], 'line-width':['case', ['boolean', ['feature-state', 'sel'], false], 3, ['get', 'vincolo'], 1.4, .6]}});
-  const b = d.confine.coordinates.flat(3); const xs = b.filter((_, i) => i % 2 == 0), ys = b.filter((_, i) => i % 2);
-  map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], {padding:{left:380, right:40, top:40, bottom:40}, duration:0});
+  const b = bbox(d.confine); map.fitBounds([[b[0], b[1]], [b[2], b[3]]], {padding:{left:420, right:40, top:40, bottom:40}, duration:0});
   map.on('click', 'af', e => show(e.features[0].properties.id, false));
   map.on('mouseenter', 'af', () => map.getCanvas().style.cursor = 'pointer'); map.on('mouseleave', 'af', () => map.getCanvas().style.cursor = '');
-  $('onlyV').onchange = list; list(); printable();
+  $('leg').innerHTML = GR.map(g => `<span><i style="background:${g[1]}"></i>${g[0]}</span>`).join('') + '<span><i style="border:2px solid #fff"></i>con vincolo</span>';
+  list();
   const s = +Q.get('a'); if (s) show(s, true);
+  }; map.loaded() ? layers() : map.on('load', layers);
 });
 
+// ---------- panoramica ----------
+function dashboard(h) {
+  const sum = f => A.reduce((s, p) => s + f(p), 0), sum2 = f => [0, 1].map(i => sum(p => f(p)[i]));
+  const ha = sum(p => p.ha), haV = sum(p => p.vincolo ? p.ha : 0), comHa = areaHa(D.confine);
+  const nb = sum(p => p.E.nb), inB = sum(p => I[p.id]?.edifici_dentro || 0), co2 = sum2(p => p.E.co2), danno = sum2(p => p.E.danno), costo = sum2(p => p.E.costo);
+  const urg = sum(p => p.E.urg), skm = sum(p => I[p.id]?.strade_km || 0), n2k = new Set(A.flatMap(p => Object.keys(I[p.id]?.natura2000 || {})));
+  const ci = h.comuni.findIndex(c => c[0] == D.comune), det = ci >= 0 ? h.comuni[ci][3] : [], yi = h.years.indexOf(+D.anno);
+  const rank = det.length ? det.filter(v => v > det[yi]).length + 1 : 0;
+  const big = [...A].sort((a, b) => b.ha - a.ha)[0];
+  $('lead').innerHTML = `Nel ${D.anno} il fuoco ha percorso <b>${fmt(ha)} ettari</b> a ${D.comune}, il <b>${fmt(ha / comHa * 100, 0)}% del territorio comunale</b>${rank == 1 ? ', <b>l\'anno peggiore dal 2001</b>' : ''}. ` +
+    `L'incendio più esteso è iniziato il ${dTxt(big.dal)} (${fmt(big.ha)} ha). <b>${fmt(haV)} ettari</b> sono boschi e pascoli: lì scattano i vincoli di legge. ` +
+    (Object.keys(I).length ? `${fmt(nb)} edifici si trovano dentro o a meno di 200 m dalle aree bruciate e ${fmt(urg)} ettari di versanti ripidi sono ora esposti a erosione e frane.` : '');
+  $('kpi').innerHTML = [[fmt(ha), 'ettari bruciati', `${A.length} aree`], [fmt(haV), 'ha di boschi e pascoli', 'soggetti a vincolo'],
+    [fmt(nb), 'edifici esposti', `${fmt(inB)} dentro le aree`], [fmt(urg), 'ha di versanti a rischio', 'erosione e colate di fango'],
+    [`${fmt(co2[0] / 1e3, 0)}–${fmt(co2[1] / 1e3, 0)} mila t`, 'CO₂ emessa', `come ${fmt(co2[0] / PAR.auto.v / 1e3, 0)}–${fmt(co2[1] / PAR.auto.v / 1e3, 0)} mila auto in un anno`],
+    [eur(danno), 'danno a boschi e macchia', 'ordine di grandezza'], [eur(costo), 'costo interventi proposti', 'stabilizzazione, ripristino, prevenzione'],
+    [fmt(skm, 0) + ' km', 'di strade entro 100 m', `${n2k.size} siti Natura 2000 toccati`]]
+    .map(k => `<div><b>${k[0]}</b><small>${k[1]}</small><small>${k[2]}</small></div>`).join('');
+  const pc = sum(p => p.particelle?.length || 0);
+  $('todo').innerHTML = [
+    [`Approvare il catasto ${D.anno} delle aree percorse dal fuoco`, `${A.filter(p => p.vincolo).length} aree con vincolo, ${fmt(pc)} particelle individuate. Pubblicazione all'albo e osservazioni per 30 giorni.`],
+    [`Ordinanza di divieto di pascolo e caccia`, `${fmt(haV)} ha di boschi e pascoli, per 10 anni.`],
+    [`Mettere in sicurezza i versanti prima delle piogge`, `${fmt(urg)} ha ripidi e bruciati gravemente: ${eur(sum2(p => p.E.iv.find(x => x.k == 'urg' && x.c)?.c || [0, 0]))}.`],
+    [`Controllare strade ed edifici esposti`, `${fmt(skm, 0)} km di strade e ${fmt(nb)} edifici: caduta massi, fango, alberi pericolanti.`],
+    [`Verificare le aree "da verificare"`, `${A.filter(p => p.affidabilita != 'alta').length} aree agricole autunnali: possibile aratura, serve un sopralluogo o le foto prima/dopo.`],
+    [`Prevenzione per la prossima estate`, `Pulizia della fascia di 200 m attorno a ${fmt(nb)} edifici e ordinanza sui terreni incolti entro giugno.`]]
+    .map(t => `<li>${t[0]}<small>${t[1]}</small></li>`).join('');
+  $('plan').innerHTML = [...A].sort((a, b) => b.E.score - a.E.score).slice(0, 6).map(p => {
+    const m = p.E.iv.filter(x => x.k != 'adm')[0] || p.E.iv[0];
+    return `<li data-i="${p.id}">Area ${p.id} · ${fmt(p.ha)} ha · ${dTxt(p.dal)}<small>${m ? m.t + ' — ' + m.q : ''}${p.E.costo[1] ? ' · ' + eur(p.E.costo) : ''}</small></li>`; }).join('');
+  $('plan').querySelectorAll('li').forEach(li => li.onclick = () => show(+li.dataset.i, true));
+  const mon = Array(12).fill(0); A.forEach(p => mon[+p.dal.slice(5, 7) - 1] += p.ha);
+  bars($('chM'), mon.slice(4, 11), MESI.slice(4, 11), -1, v => fmt(v));
+  const lcT = {}; A.forEach(p => Object.entries(p.lc).forEach(([k, v]) => lcT[k] = (lcT[k] || 0) + v * p.ha));
+  const lcE = Object.entries(lcT).sort((a, b) => b[1] - a[1]);
+  $('lcBar').innerHTML = lcE.map(([k, v]) => `<i style="width:${v / ha * 100}%;background:${(LC[k] || ['', '#666'])[1]}"></i>`).join('');
+  $('lcLeg').innerHTML = lcE.map(([k, v]) => `<span><i style="background:${(LC[k] || ['', '#666'])[1]}"></i>${(LC[k] || ['Altro'])[0]} ${fmt(v)} ha</span>`).join('');
+  if (det.length) { bars($('chY'), det, h.years.map(String), yi, v => v);
+    $('yNote').textContent = `${D.anno}: ${det[yi]} rilevamenti, media ${fmt(det.reduce((a, b) => a + b) / det.length, 0)} l'anno.${rank == 1 ? ' Massimo della serie.' : ` ${rank}° anno peggiore.`}`; }
+}
+function bars(cv, v, lab, hi, f) {
+  const r = devicePixelRatio || 1, W = cv.clientWidth, H = +cv.getAttribute('height'); cv.width = W * r; cv.height = H * r; cv.style.height = H + 'px';
+  const x = cv.getContext('2d'); x.scale(r, r); const mx = Math.max(...v), bw = W / v.length;
+  x.font = '10px system-ui'; x.textAlign = 'center';
+  v.forEach((y, i) => { const bh = (H - 26) * y / mx; x.fillStyle = hi < 0 || i == hi ? '#ff6a00' : '#4a4c52'; x.fillRect(i * bw + 1, H - 14 - bh, bw - 2, bh);
+    x.fillStyle = '#8d8a85'; if (v.length < 13 || i % 4 == 0 || i == hi) x.fillText(lab[i].length > 4 ? lab[i].slice(2) : lab[i], i * bw + bw / 2, H - 2);
+    if (v.length < 13 && y) { x.fillStyle = '#e9e6e1'; x.fillText(f(y), i * bw + bw / 2, H - 17 - bh); } });
+}
+
+// ---------- elenco ----------
 function list() {
-  const only = $('onlyV').checked;
-  map.setFilter('af', only ? ['get', 'vincolo'] : null); map.setFilter('al', only ? ['get', 'vincolo'] : null);
-  $('list').innerHTML = D.features.filter(f => !only || f.properties.vincolo).map(({properties: p}) =>
-    `<li data-i="${p.id}"><span class="n">${p.id}</span><span>${fmt(p.ha, 1)} ha · ${dt(p.dal)}${p.affidabilita == 'alta' ? '' : ' <span title="Da verificare: possibile aratura" style="color:var(--hot)">?</span>'}</span><span class="tag ${p.vincolo ? 'v' : 'nv'}">${p.vincolo ? 'vincolo' : 'coltivi/altro'}</span></li>`).join('');
+  const oV = $('onlyV').checked, oP = $('onlyP').checked;
+  const flt = ['all', ...(oV ? [['get', 'vincolo']] : []), ...(oP ? [['in', ['get', 'id'], ['literal', A.filter(p => p.prio == 'alta').map(p => p.id)]]] : [])];
+  if (map.getLayer('af')) { map.setFilter('af', flt); map.setFilter('al', flt); }
+  $('list').innerHTML = A.filter(p => (!oV || p.vincolo) && (!oP || p.prio == 'alta')).map(p =>
+    `<li data-i="${p.id}"><span class="n">${p.id}</span><span>${fmt(p.ha, 1)} ha · ${dt(p.dal)} · ${p.vincolo ? 'bosco/pascolo' : 'coltivi'}${p.affidabilita == 'alta' ? '' : ' <span style="color:var(--hot)" title="da verificare">?</span>'}</span><span class="tag ${p.prio == 'alta' ? 'pA' : p.prio == 'media' ? 'pM' : 'pB'}">${p.prio}</span></li>`).join('');
   $('list').querySelectorAll('li').forEach(li => li.onclick = () => show(+li.dataset.i, true));
 }
 
+// ---------- scheda area: resoconto ----------
 function show(id, fly) {
-  const f = D.features.find(f => f.properties.id == id), p = f.properties;
-  if (sel) map.setFeatureState({source:'a', id:sel}, {sel:false});
-  sel = id; map.setFeatureState({source:'a', id}, {sel:true});
-  if (fly) { const c = f.geometry.coordinates.flat(3); const xs = c.filter((_, i) => i % 2 == 0), ys = c.filter((_, i) => i % 2);
-    map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], {padding:{left:400, right:400, top:80, bottom:80}, maxZoom:15}); }
+  const f = D.features.find(f => f.properties.id == id), p = f.properties, im = I[id], E = p.E;
+  const fs = (i, v) => map.getSource('a') && map.setFeatureState({source:'a', id:i}, {sel:v});
+  if (sel) fs(sel, false);
+  sel = id; fs(id, true);
+  const b = bbox(f.geometry);
+  if (fly) map.fitBounds([[b[0], b[1]], [b[2], b[3]]], {padding:{left:430, right:440, top:80, bottom:80}, maxZoom:15});
   const lc = Object.entries(p.lc).sort((a, b) => b[1] - a[1]);
-  const pc = p.particelle || [], fogli = {};
-  pc.forEach(([, fg, pa]) => (fogli[fg] = fogli[fg] || []).push(pa));
-  const ctr = f.geometry.coordinates.flat(3); const lon = ctr.filter((_, i) => i % 2 == 0), lat = ctr.filter((_, i) => i % 2);
-  const cx = ((Math.min(...lon) + Math.max(...lon)) / 2).toFixed(4), cy = ((Math.min(...lat) + Math.max(...lat)) / 2).toFixed(4);
-  const day = (s, n) => { const x = new Date(s); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
-  const cb = (a, b) => `https://browser.dataspace.copernicus.eu/?zoom=15&lat=${cy}&lng=${cx}&datasetId=S2_L2A_CDAS&layerId=1_TRUE_COLOR&fromTime=${a}T00%3A00%3A00.000Z&toTime=${b}T23%3A59%3A59.999Z`;
-  $('cb').innerHTML = `<h3>Area ${p.id}</h3><div class="sub">${d_(p)} · ${p.focolai} rilevamenti satellitari</div>
-    ${p.affidabilita == 'alta' ? '' : '<p class="sub" style="color:var(--hot)">Da verificare: area agricola in autunno, il cambiamento può essere un\'aratura e non un incendio. Controlla le immagini prima/dopo.</p>'}
-    <div class="kv"><div><b>${fmt(p.ha, 1)}</b><small>ettari</small></div><div><b style="color:${GR.find(g => g[0] == p.gravita)[1]}">${p.gravita}</b><small>gravità (dNBR ${p.dnbr})</small></div><div><b>${pc.length}</b><small>particelle</small></div></div>
-    <h2>Copertura del suolo prima del fuoco</h2><div class="bar">${lc.map(([k, v]) => `<i style="width:${v * 100}%;background:${(LC[k] || ['', '#666'])[1]}"></i>`).join('')}</div>
+  const lcTxt = lc.filter(x => x[1] >= .1).map(([k, v]) => `${(LC[k] || ['altro'])[0].toLowerCase()} (${Math.round(v * 100)}%)`).join(', ');
+  const n2k = im ? Object.values(im.natura2000) : [];
+  const when = p.dal == p.al ? `il ${dTxt(p.dal)}` : `tra il ${dTxt(p.dal)} e il ${dTxt(p.al)}`;
+  const story = [
+    `<p>${when.charAt(0).toUpperCase() + when.slice(1)} ${p.dal.slice(0, 4)} il fuoco ha percorso <b>${fmt(p.ha, 1)} ettari</b>${im ? `, tra ${im.quota[0]} e ${im.quota[1]} m di quota` : ''}. Prima dell'incendio c'erano soprattutto ${lcTxt}. I satelliti hanno registrato ${p.focolai} punti di fuoco.</p>`,
+    `<p>Gravità <b>${p.gravita}</b>: ${GR_TXT[p.gravita]}.${p.affidabilita != 'alta' ? ' <span style="color:var(--hot)">Area agricola in autunno: il segnale può essere un\'aratura, va verificato con le immagini.</span>' : ''}</p>`,
+    im ? `<p>${im.pend_ripida_pct > .2 ? `<b>Il ${Math.round(im.pend_ripida_pct * 100)}% dell'area ha pendenze oltre il 30%</b> (media ${fmt(im.pend_media)}%): senza vegetazione, le prime piogge possono portare via il suolo e causare colate di fango a valle.` : `Pendenze moderate (media ${fmt(im.pend_media)}%): rischio di erosione contenuto.`}
+      ${E.nb ? ` <b>${im.edifici_dentro} edifici dentro l'area e ${im.edifici_200m} a meno di 200 m</b>: è la fascia di interfaccia tra vegetazione e abitato, la più pericolosa per le persone.` : ' Nessun edificio nelle vicinanze.'}
+      ${im.strade_km > .2 ? ` Coinvolge ${fmt(im.strade_km, 1)} km di strade (${im.strade.filter(n => !/^strade /.test(n)).concat(im.strade.filter(n => /^strade /.test(n))).slice(0, 3).join(', ')}).` : ''}
+      ${n2k.length ? ` Ricade nel sito Natura 2000 <b>${n2k.map(n => n[0]).join(', ')}</b> (${fmt(n2k.reduce((s, n) => s + n[1], 0), 1)} ha): area protetta per habitat e specie europee.` : ''}</p>` : '',
+    `<p>Emissioni stimate: <b>${fmt(E.co2[0])}–${fmt(E.co2[1])} t di CO₂</b>, quanto ${fmt(E.co2[0] / PAR.auto.v)}–${fmt(E.co2[1] / PAR.auto.v)} auto in un anno.${p.vincolo ? ` Su questi terreni i vincoli di legge durano fino al ${plus(p.dal, 15)}.` : ''}</p>`].join('');
+  const rk = (l, t, v) => `<div class="${l}"><b>${t}</b>${v}</div>`;
+  const risk = im ? [rk(im.pend_ripida_pct > .3 && E.sev >= .5 ? 'hi' : im.pend_ripida_pct > .15 ? 'me' : 'lo', 'Erosione e frane', `${fmt(E.ripidi, 1)} ha ripidi`),
+    rk(im.edifici_dentro > 0 ? 'hi' : im.edifici_200m > 0 ? 'me' : 'lo', 'Case', `${E.nb} edifici esposti`),
+    rk(im.strade_km > 1 ? 'hi' : im.strade_km > .2 ? 'me' : 'lo', 'Strade', `${fmt(im.strade_km, 1)} km`),
+    rk(n2k.length ? 'hi' : 'lo', 'Natura', n2k.length ? 'area protetta' : 'fuori aree protette')].join('') : '';
+  const pc = p.particelle || [], fogli = {}; pc.forEach(([, fg, pa]) => (fogli[fg] = fogli[fg] || []).push(pa));
+  $('cb').innerHTML = `<h3>Area ${p.id} <span class="tag ${p.prio == 'alta' ? 'pA' : p.prio == 'media' ? 'pM' : 'pB'}" style="vertical-align:middle">priorità ${p.prio}</span></h3>
+    <div class="sub">${p.dal == p.al ? dt(p.dal) : dt(p.dal) + ' – ' + dt(p.al)} · ${fmt(p.ha, 1)} ha · gravità ${p.gravita}</div>
+    <button class="big" onclick="viewer(${p.id})">Guarda prima e dopo (immagini satellitari)</button>
+    <h2>Cosa è successo</h2><div class="story">${story}</div>
+    <h2>Rischi</h2><div class="risk">${risk || '<span class="sub">dati di impatto non disponibili</span>'}</div>
+    <h2>Interventi proposti</h2><table>${E.iv.map(x => `<tr><td>${x.t}<br><span class="sub">${x.q} · ${x.w}</span></td><td>${x.c ? (x.c[1] ? eur(x.c) : 'atto amministrativo') : 'da sopralluogo'}</td></tr>`).join('')}
+      <tr><td><b>Totale stimato</b></td><td><b>${E.costo[1] ? eur(E.costo) : '—'}</b></td></tr></table>
+    <h2>Stima dei danni</h2><table>
+      <tr><td>Danno a boschi e macchia<br><span class="sub">ordine di grandezza, vedi Metodo e fonti</span></td><td>${E.danno[1] ? eur(E.danno) : '—'}</td></tr>
+      <tr><td>Biomassa bruciata</td><td>${fmt(E.co2[0] / PAR.co2.v)}–${fmt(E.co2[1] / PAR.co2.v)} t</td></tr>
+      <tr><td>Coltivi bruciati<br><span class="sub">da quantificare con le denunce degli agricoltori</span></td><td>${fmt((p.lc[40] || 0) * p.ha, 1)} ha</td></tr></table>
+    <h2>Vincoli di legge</h2>${p.vincolo ? `<table><tr><td>Destinazione d'uso immutabile</td><td>fino al ${plus(p.dal, 15)}</td></tr><tr><td>Divieto di costruire, pascolo e caccia</td><td>fino al ${plus(p.dal, 10)}</td></tr><tr><td>Niente rimboschimenti pubblici non autorizzati</td><td>fino al ${plus(p.dal, 5)}</td></tr></table>`
+      : `<p class="sub">Prevalgono coltivi (bosco e pascolo ${Math.round(p.bosco_pascolo * 100)}%): vincoli da valutare particella per particella.</p>`}
+    <h2>Copertura del suolo</h2><div class="bar">${lc.map(([k, v]) => `<i style="width:${v * 100}%;background:${(LC[k] || ['', '#666'])[1]}"></i>`).join('')}</div>
     <div class="legend">${lc.map(([k, v]) => `<span><i style="background:${(LC[k] || ['', '#666'])[1]}"></i>${(LC[k] || ['Altro'])[0]} ${Math.round(v * 100)}%</span>`).join('')}</div>
-    <h2>Vincoli L. 353/2000</h2>${p.vincolo ? `<table>
-      <tr><td>Destinazione d'uso immutabile</td><td>fino al ${plus(p.dal, 15)}</td></tr>
-      <tr><td>Divieto di edificazione</td><td>fino al ${plus(p.dal, 10)}</td></tr>
-      <tr><td>Divieto di pascolo e caccia</td><td>fino al ${plus(p.dal, 10)}</td></tr>
-      <tr><td>Rimboschimento con fondi pubblici</td><td>fino al ${plus(p.dal, 5)}</td></tr></table>`
-      : `<p class="sub">Prevalenza di coltivi o altre superfici (bosco/pascolo ${Math.round(p.bosco_pascolo * 100)}%): vincoli da valutare particella per particella.</p>`}
-    <h2>Particelle catastali (foglio: particelle)</h2><div class="parc">${Object.entries(fogli).map(([fg, ps]) => `<b>Foglio ${fg}</b>: ${ps.join(', ')}`).join('<br>') || 'non disponibili'}</div>
-    <h2>Verifica sulle immagini</h2><div class="btns"><a target="_blank" href="${cb(day(p.dal, -20), day(p.dal, -1))}">Prima</a><a target="_blank" href="${cb(day(p.al, 1), day(p.al, 25))}">Dopo</a></div>
-    <p class="sub">Copernicus Browser, Sentinel-2 a colori reali. ${cy}, ${cx}</p>`;
-  $('card').style.display = 'block';
+    <h2>Particelle catastali (${pc.length})</h2><div class="parc">${Object.entries(fogli).map(([fg, ps]) => `<b>Foglio ${fg}</b>: ${ps.join(', ')}`).join('<br>') || 'in elaborazione'}</div>`;
+  $('card').style.display = 'block'; $('card').scrollTop = 0;
 }
-const d_ = p => p.dal == p.al ? dt(p.dal) : `${dt(p.dal)} – ${dt(p.al)}`;
 function hide() { $('card').style.display = 'none'; if (sel) map.setFeatureState({source:'a', id:sel}, {sel:false}); sel = null; }
 
+// ---------- visore prima/dopo: scarica solo il riquadro dell'area dai file Sentinel-2 (COG) ----------
+let V = null;
+async function stac(lon, lat, from, to) {
+  const r = await fetch('https://earth-search.aws.element84.com/v1/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+    collections:['sentinel-2-l2a'], intersects:{type:'Point', coordinates:[lon, lat]}, datetime:`${from}T00:00:00Z/${to}T23:59:59Z`,
+    query:{'eo:cloud_cover':{lt:15}}, limit:60, sortby:[{field:'properties.datetime', direction:'asc'}]})});
+  return (await r.json()).features.filter(f => f.assets.visual);
+}
+async function viewer(id) {
+  const f = D.features.find(f => f.properties.id == id), p = f.properties;
+  $('vw').style.display = 'flex'; $('vT').textContent = `Area ${id} — ${fmt(p.ha, 1)} ha, incendio del ${dt(p.dal)}`; $('vst').textContent = 'Cerco le immagini…';
+  const b = bbox(f.geometry), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+  const [pre, post] = await Promise.all([stac(cx, cy, day(p.dal, -45), day(p.dal, -1)), stac(cx, cy, day(p.al, 1), day(p.al, 45))]);
+  const u = coords(f.geometry).map(c => proj4('EPSG:4326', UTM, c)), xs = u.map(c => c[0]), ys = u.map(c => c[1]);
+  const m = Math.max(400, (Math.max(...xs) - Math.min(...xs)) * .25, (Math.max(...ys) - Math.min(...ys)) * .25);
+  V = {id, f, pre: pre.reverse(), post, i: {pre: 0, post: 0}, box: [Math.min(...xs) - m, Math.min(...ys) - m, Math.max(...xs) + m, Math.max(...ys) + m]};
+  if (!pre.length || !post.length) { $('vst').textContent = 'Nessuna immagine limpida disponibile in quel periodo.'; return; }
+  await Promise.all([draw('pre'), draw('post')]);
+}
+async function step(k, d) { const n = V[k].length, i = V.i[k] + d; if (i < 0 || i >= n) return; V.i[k] = i; await draw(k); }
+async function draw(k) {
+  const it = V[k][V.i[k]], cv = $(k == 'pre' ? 'cA' : 'cB'), [x0, y0, x1, y1] = V.box;
+  $(k == 'pre' ? 'dA' : 'dB').textContent = ' ' + dt(it.properties.datetime.slice(0, 10)) + ` (${Math.round(it.properties['eo:cloud_cover'])}% nubi) `;
+  $(k == 'pre' ? 'lA' : 'lB').textContent = (k == 'pre' ? 'Prima · ' : 'Dopo · ') + dt(it.properties.datetime.slice(0, 10));
+  $('vst').textContent = 'Scarico il riquadro…';
+  const w0 = Math.round((x1 - x0) / 10), h0 = Math.round((y1 - y0) / 10), s = Math.min(1, 2000 / Math.max(w0, h0)), W = Math.round(w0 * s), H = Math.round(h0 * s);
+  try {
+    const tif = await GeoTIFF.fromUrl(it.assets.visual.href);
+    const r = await tif.readRasters({bbox:[x0, y0, x1, y1], width:W, height:H, interleave:true, resampleMethod:'bilinear'});
+    const im = new ImageData(W, H); for (let i = 0, j = 0; i < r.length; i += 3, j += 4) { im.data[j] = r[i]; im.data[j + 1] = r[i + 1]; im.data[j + 2] = r[i + 2]; im.data[j + 3] = 255; }
+    cv.width = W; cv.height = H; const c = cv.getContext('2d'); c.putImageData(im, 0, 0);
+    c.strokeStyle = '#00e5ff'; c.lineWidth = Math.max(1.5, W / 700); c.setLineDash([6, 4]);
+    const g = V.f.geometry; (g.type == 'Polygon' ? [g.coordinates] : g.coordinates).forEach(pol => pol.forEach(ring => { c.beginPath();
+      ring.forEach((pt, i) => { const [x, y] = proj4('EPSG:4326', UTM, pt); const px = (x - x0) / (x1 - x0) * W, py = (y1 - y) / (y1 - y0) * H; i ? c.lineTo(px, py) : c.moveTo(px, py); }); c.stroke(); }));
+    $('vst').textContent = `${W}×${H} px · ${fmt((x1 - x0) / 1000, 1)}×${fmt((y1 - y0) / 1000, 1)} km`;
+    const z = Math.min(cmp.clientWidth / W, cmp.clientHeight / H); cv.style.width = W * z + 'px'; cv.style.height = H * z + 'px';
+    if (k == 'post') { const r = cv.getBoundingClientRect(); slide({clientX: r.left + r.width / 2}); }
+  } catch (e) { $('vst').textContent = 'Errore nel caricare l\'immagine: ' + e.message; }
+}
+const cmp = $('cmp'); let drag = false;
+const slide = e => { const r = $('cB').getBoundingClientRect(), x = Math.min(Math.max(((e.touches ? e.touches[0].clientX : e.clientX) - r.left) / r.width, 0), 1);
+  $('cA').style.clipPath = `inset(0 ${100 - x * 100}% 0 0)`; $('sl').style.left = (r.left - cmp.getBoundingClientRect().left + x * r.width) + 'px'; };
+cmp.onmousedown = e => { drag = true; slide(e); }; onmouseup = () => drag = false; cmp.onmousemove = e => drag && slide(e); cmp.ontouchmove = slide;
+function save(c, nm) { $(c).toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${C}_${Y}_area${V.id}_${nm}_${(nm == 'prima' ? $('dA') : $('dB')).textContent.trim().slice(0, 10).replaceAll('/', '-')}.png`; a.click(); }); }
+function tab(c) { $(c).toBlob(b => window.open(URL.createObjectURL(b), '_blank')); }
+
+// ---------- documenti ----------
 function rows() {
-  const r = [['area', 'data_inizio', 'data_fine', 'ettari_area', 'gravita', 'bosco_pascolo_pct', 'vincolo', 'affidabilita', 'codice_comune', 'foglio', 'particella', 'edificazione_vietata_fino', 'destinazione_immutabile_fino']];
-  D.features.forEach(({properties: p}) => (p.particelle?.length ? p.particelle : [['', '', '']]).forEach(([cc, fg, pa]) =>
-    r.push([p.id, p.dal, p.al, p.ha, p.gravita, Math.round(p.bosco_pascolo * 100), p.vincolo ? 'si' : 'da valutare', p.affidabilita, cc, fg, pa, p.vincolo ? plus(p.dal, 10) : '', p.vincolo ? plus(p.dal, 15) : ''])));
+  const r = [['area', 'priorita', 'data_inizio', 'data_fine', 'ettari_area', 'gravita', 'bosco_pascolo_pct', 'vincolo', 'affidabilita', 'codice_comune', 'foglio', 'particella', 'edificazione_vietata_fino', 'destinazione_immutabile_fino']];
+  A.forEach(p => (p.particelle?.length ? p.particelle : [['', '', '']]).forEach(([cc, fg, pa]) =>
+    r.push([p.id, p.prio, p.dal, p.al, p.ha, p.gravita, Math.round(p.bosco_pascolo * 100), p.vincolo ? 'si' : 'da valutare', p.affidabilita, cc, fg, pa, p.vincolo ? plus(p.dal, 10) : '', p.vincolo ? plus(p.dal, 15) : ''])));
   return r;
 }
 function dl(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); }
 $('bCsv').onclick = () => dl(`catasto_incendi_${C}_${Y}.csv`, '﻿' + rows().map(r => r.join(';')).join('\n'), 'text/csv');
-$('bGeo').onclick = () => dl(`aree_percorse_${C}_${Y}.geojson`, JSON.stringify({type:'FeatureCollection', features:D.features}), 'application/geo+json');
+$('bGeo').onclick = () => dl(`aree_percorse_${C}_${Y}.geojson`, JSON.stringify({type:'FeatureCollection', features:D.features.map(f => ({...f, properties:{...f.properties, E:undefined}}))}), 'application/geo+json');
 function printable() {
-  const F = D.features;
   $('print').innerHTML = `<h1>Comune di ${D.comune} — Aree percorse dal fuoco ${D.anno} (bozza)</h1>
-    <p>Elaborazione automatica da immagini satellitari Sentinel-2 e NASA FIRMS, ai sensi dell'art. 10 L. 353/2000. Da validare con i rilievi del Corpo Forestale. Aree: ${F.length}, ettari: ${fmt(F.reduce((s, f) => s + f.properties.ha, 0), 1)}.</p>
+    <p>Elaborazione automatica da immagini satellitari Sentinel-2 e NASA FIRMS, ai sensi dell'art. 10 L. 353/2000. Da validare con i rilievi del Corpo Forestale. Aree: ${A.length}, ettari: ${fmt(A.reduce((s, p) => s + p.ha, 0), 1)}.</p>
     <table><tr><th>Area</th><th>Data</th><th>Ettari</th><th>Bosco/pascolo</th><th>Vincolo</th><th>Particelle (foglio: particelle)</th></tr>
-    ${F.map(({properties: p}) => { const fo = {}; (p.particelle || []).forEach(([, fg, pa]) => (fo[fg] = fo[fg] || []).push(pa));
-      return `<tr><td>${p.id}</td><td>${d_(p)}</td><td>${fmt(p.ha, 1)}</td><td>${Math.round(p.bosco_pascolo * 100)}%</td><td>${p.vincolo ? 'sì, fino al ' + plus(p.dal, 15) : 'da valutare'}</td><td>${Object.entries(fo).map(([f, ps]) => `F.${f}: ${ps.join(', ')}`).join('; ')}</td></tr>`; }).join('')}</table>`;
+    ${A.map(p => { const fo = {}; (p.particelle || []).forEach(([, fg, pa]) => (fo[fg] = fo[fg] || []).push(pa));
+      return `<tr><td>${p.id}</td><td>${dt(p.dal)}</td><td>${fmt(p.ha, 1)}</td><td>${Math.round(p.bosco_pascolo * 100)}%</td><td>${p.vincolo ? 'sì, fino al ' + plus(p.dal, 15) : 'da valutare'}</td><td>${Object.entries(fo).map(([f, ps]) => `F.${f}: ${ps.join(', ')}`).join('; ')}</td></tr>`; }).join('')}</table>`;
 }
 </script>
 </body>

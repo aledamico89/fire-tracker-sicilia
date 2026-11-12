@@ -39,7 +39,11 @@ Gradient boosting (scikit-learn) su 1,7 milioni di righe comune × giorno, 2014�
 
 Variabili più importanti: storico del comune, periodo dell'anno, temperatura massima, superficie, FFMC. Limiti: l'addestramento usa ERA5 su griglia di 50 km, la previsione usa dati previsionali al centroide del comune; MODIS non vede i piccoli incendi. La probabilità assoluta resta bassa (media 0,4% per comune al giorno): conta il confronto relativo.
 
-## Catasto incendi (`catasto.html`) — pilota Monreale 2023
+## Dopo l'incendio (`catasto.html`) — pilota Monreale 2023
+**Panoramica del comune:** ettari bruciati, quota di territorio, edifici e strade esposti, versanti a rischio di erosione, CO₂, danno stimato e costo degli interventi, cosa deve fare il Comune, aree in ordine di priorità.
+**Scheda di ogni area:** resoconto scritto (cosa è bruciato, gravità, pendenze, case, strade, Natura 2000), interventi proposti con tempi e costi, vincoli, particelle. **Visore prima/dopo** Sentinel-2 a 10 m: il browser scarica solo il riquadro dell'area dai file Cloud-Optimized GeoTIFF su AWS, senza ospitare immagini nel repository; download PNG.
+Le stime di costo sono ordini di grandezza con parametri, fonti e affidabilità dichiarati nella pagina (scheda "Metodo e fonti").
+
 Bozza automatica del **catasto delle aree percorse dal fuoco**, che la legge 353/2000 (art. 10) impone a ogni comune: su boschi e pascoli bruciati scattano 15 anni di destinazione immutabile, 10 anni di divieto di edificazione, pascolo e caccia, 5 anni senza rimboschimenti con fondi pubblici.
 - Perimetri da Sentinel-2 (dNBR prima/dopo ogni incendio visto da MODIS/VIIRS, 20 m), gravità, copertura del suolo ESA WorldCover.
 - Vincoli e scadenze per ogni area; **elenco foglio/particella** dal servizio INSPIRE dell'Agenzia delle Entrate.
@@ -50,6 +54,7 @@ Bozza automatica del **catasto delle aree percorse dal fuoco**, che la legge 353
 pip install rasterio pyproj shapely scipy
 python3 scripts/burned.py Monreale 2023
 python3 scripts/parcels.py web/data/catasto_monreale_2023.json
+python3 scripts/impact.py monreale 2023      # pendenze, edifici, strade, Natura 2000
 ```
 
 ## Rigenerare i dati
