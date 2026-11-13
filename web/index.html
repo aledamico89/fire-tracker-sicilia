@@ -87,6 +87,7 @@ canvas.spark{width:100%;height:44px;display:block;margin-top:6px}
     <p>Focolai: rilevazioni satellitari NASA FIRMS (MODIS 1 km, VIIRS 375 m), 6–8 passaggi al giorno; confidenza bassa esclusa. Un punto è un pixel caldo, non un perimetro: fumo e nuvole possono nascondere il fuoco.</p>
     <p>Vento: particelle animate sul campo ERA5 interpolato. Fumo: <b>simulazione</b>, ogni focolaio emette in proporzione alla potenza misurata dal satellite (FRP) e il pennacchio viaggia con il vento reale nel tempo del replay, si allarga e si diluisce in 4–8 ore; non è una misura. Fiamme: resa visiva dei focolai delle ultime 6 ore, dimensione proporzionale alla potenza. Satellite reale: Sentinel-2 L2A, ultima immagine limpida prima del 22 luglio e prima dopo il 28 luglio, solo il riquadro inquadrato.</p>
     <p>Mezzi aerei: posizioni ADS-B reali dall'archivio open data <a href="https://www.adsb.lol">adsb.lol</a> (ODbL), raccolte da ricevitori volontari. Coprono bene solo le zone vicine ai ricevitori (Trapanese); a bassa quota tra i rilievi il segnale si perde, quindi le tracce sono parziali e non misurano il numero di interventi.</p>
+    <p>Dati nel punto toccato: solo sulla terraferma siciliana. Per ogni comune temperatura e umidità ERA5-Land (~9 km, modello solo terra), vento e pioggia ERA5 (0,25°), al centro del comune; pericolo FWI calcolato con gli stessi dati dal 1° aprile. In mare o fuori dalla Sicilia l'indice non si applica.</p>
     <p>Meteo: rianalisi ERA5 via Open-Meteo, griglia 0,5°, oraria. Valori indicativi, non misure di stazione.</p>
     <p>Pericolo: Fire Weather Index canadese (Van Wagner 1987) calcolato a mezzogiorno, con i codici di umidità del combustibile accumulati dal 1° aprile. Classi EFFIS.</p>
     <p>Aria: modello Copernicus CAMS, non misure di centralina. Comuni: confini openpolis/ISTAT, popolazione OpenStreetMap.</p>
@@ -216,10 +217,10 @@ Promise.all([
       lastHour = i; map.getSource('wind').setData(windData(i));
       $('sT').textContent = Math.round(Math.max(...wx.points.map(p => p.t[i]))) + '°';
       $('sW').textContent = Math.round(pal.ws[i]) + ' km/h';
-      const d = Math.min(an.days.length - 1, Math.floor(i / 24)), palI = wx.points.indexOf(pal), fv = an.fwi[palI][d], fc = band(FWI_C, fv);
+      const d = Math.min(an.days.length - 1, Math.floor(i / 24)), fser = pal.fwi || an.fwi[wx.points.indexOf(pal)], fv = fser[d], fc = band(FWI_C, fv);
       an.fwi.forEach((f, k) => map.setFeatureState({source:'fwi', id:k}, {c: band(FWI_C, f[d])[2]}));
       $('aF').textContent = Math.round(fv); $('aFc').textContent = fc[1]; $('aFc').style.background = fc[2];
-      spark($('cF'), an.fwi[palI], d, v => band(FWI_C, v)[2], {bars:true, max:70});
+      spark($('cF'), fser, d, v => band(FWI_C, v)[2], {bars:true, max:70});
       map.getSource('air').setData({type:'FeatureCollection', features: an.air.map(a => { const v = Math.round(a[ 'pm10' ][i] || 0);
         return {type:'Feature', geometry:{type:'Point', coordinates:[a.lon, a.lat]}, properties:{name:a.name, v, c:band(PM_C, v)[2], q:band(PM_C, v)[1]}}; })});
       const pv = Math.round(palAir.pm10[i] || 0), pc = band(PM_C, pv);
@@ -258,18 +259,51 @@ Promise.all([
   addEventListener('resize', () => { lastHour = -1; render(); });
   $('l3d').onchange = e => { map.setTerrain(e.target.checked ? {source:'dem', exaggeration:1.4} : null); map.easeTo({pitch: e.target.checked ? 55 : 0}); };
   addEventListener('resize', drawHist);
-  // tocco sulla mappa: dati del punto (griglia ERA5 più vicina, città CAMS più vicina)
-  const near = (L, lon, lat) => L.reduce((a, p) => Math.hypot(p.lon - lon, p.lat - lat) < Math.hypot(a.lon - lon, a.lat - lat) ? p : a);
+  // tocco sulla mappa: dati solo sulla terraferma siciliana (comune riconosciuto dal confine ISTAT),
+  // meteo e pericolo interpolati tra i punti di griglia ERA5 a terra (quelli in mare falsano umidità e vento)
   const DIR = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'], ptPop = new maplibregl.Popup({closeButton:true, offset:8});
-  map.on('click', e => {
-    if (map.queryRenderedFeatures(e.point, {layers:['air']}).length) return;
-    const {lng, lat} = e.lngLat; pal = near(wx.points, lng, lat); palAir = near(an.air, lng, lat);
-    const c = `${lat.toFixed(2).replace('.', ',')}° N ${lng.toFixed(2).replace('.', ',')}° E`;
-    $('sWl').textContent = 'vento nel punto scelto'; $('hF').textContent = 'Pericolo incendi · punto scelto'; $('hP').textContent = "Qualità dell'aria · " + palAir.name;
+  const esc = s => String(s).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+  const rings = g => g.type == 'Polygon' ? [g.coordinates] : g.coordinates;
+  const inRing = (x, y, r) => { let o = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j];
+    if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) o = !o; } return o; };
+  const inGeom = (x, y, g) => rings(g).some(pol => inRing(x, y, pol[0]) && !pol.slice(1).some(h => inRing(x, y, h)));
+  let GEO = null;
+  const geo = () => GEO || (GEO = Promise.all([fetch('data/comuni.geojson').then(r => r.json()), fetch('data/history.json').then(r => r.json()), fetch('data/meteo_comuni.json').then(r => r.ok ? r.json() : null).catch(() => null)]).then(([g, h, M]) => {
+    const F = g.features.map((f, k) => { const c = rings(f.geometry).flat(3); const xs = c.filter((_, j) => j % 2 == 0), ys = c.filter((_, j) => j % 2);
+      return {k, g: f.geometry, n: h.comuni[k][0], pr: h.comuni[k][1], bb: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]}; });
+    const find = (x, y) => F.find(f => x >= f.bb[0] && x <= f.bb[2] && y >= f.bb[1] && y <= f.bb[3] && inGeom(x, y, f.g));
+    const land = wx.points.map((p, k) => ({p, k})).filter(o => find(o.p.lon, o.p.lat));
+    return {find, land, M};
+  }));
+  const kmTo = (a, b, x, y) => Math.hypot((a - x) * 88, (b - y) * 111);   // km approssimati a 38° N
+  map.on('click', async e => {
+    if (!e.silent && map.queryRenderedFeatures(e.point, {layers:['air']}).length) return;
+    const {lng, lat} = e.lngLat, G = await geo(), com = G.find(lng, lat);
+    if (!com) { ptPop.setLngLat(e.lngLat).setHTML('<div style="font-weight:600">Fuori dalla terraferma siciliana</div><div style="color:#b9b5ae;font-size:12px;max-width:220px">Nessun dato di pericolo incendi qui: l\'indice vale solo per la vegetazione a terra.</div>').addTo(map); return; }
+    // pesi a distanza inversa sui punti di griglia a terra entro 60 km (altrimenti il più vicino)
+    let W = G.land.map(o => ({...o, d: kmTo(o.p.lon, o.p.lat, lng, lat)})).sort((x, y) => x.d - y.d);
+    const nearest = W[0].d; W = W.filter(o => o.d <= 60); if (!W.length) W = [G.land.map(o => ({...o, d: kmTo(o.p.lon, o.p.lat, lng, lat)})).sort((x, y) => x.d - y.d)[0]];
+    const w = W.map(o => 1 / Math.max(o.d, 1) ** 2), sw = w.reduce((s, v) => s + v, 0);
+    const n = wx.points[0].ws.length, comb = key => Array.from({length: n}, (_, i) => W.reduce((s, o, j) => s + o.p[key][i] * w[j], 0) / sw);
+    const U = Array.from({length: n}, (_, i) => W.reduce((s, o, j) => s - o.p.ws[i] * Math.sin(o.p.wd[i] * Math.PI / 180) * w[j], 0) / sw);
+    const V = Array.from({length: n}, (_, i) => W.reduce((s, o, j) => s - o.p.ws[i] * Math.cos(o.p.wd[i] * Math.PI / 180) * w[j], 0) / sw);
+    const M = G.M, k = com.k, own = M && M.t[k] && M.t[k].every(v => v !== null) && M.ws[k].every(v => v !== null);
+    pal = own ? {lon: lng, lat, t: M.t[k], rh: M.rh[k], ws: M.ws[k], wd: M.wd[k], fwi: M.fwi[k]} : {lon: lng, lat, t: comb('t'), rh: comb('rh'), ws: U.map((u, i) => Math.hypot(u, V[i])), wd: U.map((u, i) => (Math.atan2(-u, -V[i]) * 180 / Math.PI + 360) % 360),
+      fwi: an.fwi[0].map((_, d) => W.reduce((s, o, j) => s + an.fwi[o.k][d] * w[j], 0) / sw)};
+    palAir = an.air.reduce((a, p) => kmTo(p.lon, p.lat, lng, lat) < kmTo(a.lon, a.lat, lng, lat) ? p : a);
+    const aKm = Math.round(kmTo(palAir.lon, palAir.lat, lng, lat));
+    $('sWl').textContent = 'vento a ' + com.n; $('hF').textContent = 'Pericolo incendi · ' + com.n;
+    $('hP').textContent = "Qualità dell'aria · " + palAir.name + (aKm > 5 ? ` (a ${aKm} km)` : '');
     lastHour = -1; render();
-    const i = Math.max(0, Math.min(pal.ws.length - 1, Math.floor((t - t0) / wx.step)));
-    ptPop.setLngLat(e.lngLat).setHTML(`<div style="font-weight:600">${c}</div><div style="font-size:20px;font-weight:700">${Math.round(pal.ws[i])} km/h <span style="font-size:12px;font-weight:400">da ${DIR[Math.round(pal.wd[i] / 45) % 8]}</span></div><div>${Math.round(pal.t[i])}° · umidità ${Math.round(pal.rh[i])}%</div><div style="color:#b9b5ae;font-size:11px">ERA5, cella di ~50 km · aria: ${palAir.name}</div>`).addTo(map);
+    const i = Math.max(0, Math.min(n - 1, Math.floor((t - t0) / wx.step))), d = Math.min(an.days.length - 1, Math.floor(i / 24)), fv = pal.fwi[d], fc = band(FWI_C, fv);
+    if (e.silent) return;
+    ptPop.setLngLat(e.lngLat).setHTML(`<div style="font-weight:600">${esc(com.n)} <span style="color:#b9b5ae;font-weight:400">${esc(com.pr)}</span></div>
+      <div>Pericolo incendi: <b style="color:${fc[2]}">${Math.round(fv)} · ${fc[1]}</b></div>
+      <div>Vento ${Math.round(pal.ws[i])} km/h da ${DIR[Math.round(pal.wd[i] / 45) % 8]} · ${Math.round(pal.t[i])}° · umidità ${Math.round(pal.rh[i])}%</div>
+      <div style="color:#b9b5ae;font-size:11px;max-width:240px">${own ? 'Rianalisi ERA5-Land (~9 km) al centro del comune: condizioni del territorio comunale, non del singolo versante.' : `Stima interpolata da ${W.length} punti ERA5 a terra (griglia ~50 km, il più vicino a ${Math.round(nearest)} km).`}</div>`).addTo(map);
   });
+  // valore iniziale: Palermo calcolato allo stesso modo (non dal punto di griglia più vicino, che è in mare)
+  map.fire('click', {lngLat: new maplibregl.LngLat(13.36, 38.115), point: map.project([13.36, 38.115]), silent: true});
   dispatchEvent(new CustomEvent('ev-ready', {detail:{map, wx, hot, an, now: () => t}}));
   render();
 });
