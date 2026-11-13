@@ -41,9 +41,13 @@ addEventListener('ev-ready', ({detail: E}) => {
 
   // focolai attivi (ultime 6 h di tempo simulato), aggiornati due volte al secondo
   let active = [], lastAct = 0;
-  const refresh = ts => { if (ts - lastAct < 500) return; lastAct = ts; const t = E.now(); active = hot.filter(p => p[2] <= t && t - p[2] < 21600); };
+  const refresh = ts => { if (ts - lastAct < 500) return; lastAct = ts; const t = E.now(); active = hot.filter(p => p[2] <= t && t - p[2] < 21600); };   // focolai delle ultime 6 h
 
-  let last = 0;
+  let last = 0, prevNow = E.now();
+  // modalità focolai: punti (dati) o fiamme (simulazione visiva)
+  const flames = () => document.querySelector('input[name=fm]:checked')?.value === 'fiamme';
+  const setMode = () => { const f = flames(); map.setFilter('fire', f ? ['>', ['get', 'age'], 6] : null); map.setLayoutProperty('glow', 'visibility', f ? 'none' : 'visible'); };
+  document.querySelectorAll('input[name=fm]').forEach(r => r.onchange = setMode);
   function frame(ts) {
     const dt = Math.min(.05, (ts - last) / 1000 || 0); last = ts;
     const i = hourIdx(), z = map.getZoom(), deg = 360 / (512 * 2 ** z);   // gradi per pixel
@@ -62,21 +66,45 @@ addEventListener('ev-ready', ({detail: E}) => {
       }
       gw.stroke();
     }
-    // fumo: ogni focolaio emette in proporzione alla potenza (FRP), il pennacchio segue il vento reale
+    // tempo simulato trascorso in questo fotogramma (il fumo si muove nel tempo del replay, non dello schermo)
+    const nowS = E.now(); let dts = nowS - prevNow; prevNow = nowS;
+    if (dts < 0 || dts > 4 * 3600) { dts = 0; smoke = []; }          // salto sulla timeline: si riparte puliti
+    if (dts === 0) dts = dt * 120;                                       // in pausa: deriva lenta (2 min simulati al secondo)
     gs.clearRect(0, 0, W, H);
+    refresh(ts);
+    const kmpx = deg * 111 * Math.cos(map.getCenter().lat * R);          // km per pixel
+    // fiamme (simulazione visiva): solo sui focolai delle ultime 6 h, dimensione dalla potenza (FRP), sfarfallio
+    if (flames()) {
+      gs.globalCompositeOperation = 'lighter';
+      for (let n = 0; n < active.length; n++) {
+        const h = active[n], ageH = (nowS - h[2]) / 3600, q = map.project([h[0], h[1]]);
+        if (q.x < -60 || q.y < -60 || q.x > W + 60 || q.y > H + 60) continue;
+        const life = Math.max(0, 1 - ageH / 6), fl = .78 + .22 * Math.sin(ts / 85 + h[2] % 97) + .08 * Math.random();
+        const r = Math.max(1.5, Math.min(36, (.08 + Math.sqrt(h[3]) * .02) / kmpx)) * fl * (.4 + .6 * life);   // ~100–400 m
+        let g = gs.createRadialGradient(q.x, q.y, 0, q.x, q.y, r * 3);
+        g.addColorStop(0, `rgba(255,110,20,${.22 * life})`); g.addColorStop(1, 'rgba(255,60,0,0)');
+        gs.fillStyle = g; gs.fillRect(q.x - r * 3, q.y - r * 3, r * 6, r * 6);
+        gs.save(); gs.translate(q.x, q.y - r * .6); gs.scale(1, 1.9);
+        g = gs.createRadialGradient(0, r * .25, 0, 0, 0, r);
+        g.addColorStop(0, `rgba(255,245,190,${.8 * life})`); g.addColorStop(.35, `rgba(255,160,40,${.6 * life})`); g.addColorStop(1, 'rgba(200,30,0,0)');
+        gs.fillStyle = g; gs.beginPath(); gs.arc(0, 0, r, 0, 7); gs.fill(); gs.restore();
+      }
+      gs.globalCompositeOperation = 'source-over';
+    }
+    // fumo: ogni focolaio emette in proporzione alla potenza (FRP); il pennacchio viaggia col vento ERA5 nel tempo simulato,
+    // si allarga (~2,5 km/h) e si diluisce in 4–8 ore
     if ($('lSmoke').checked) {
-      refresh(ts);
-      for (const h of active) if (smoke.length < (mobile ? 1200 : 3000) && Math.random() < Math.min(1, h[3] / 60) * dt * 6)
-        smoke.push({lon: h[0], lat: h[1], age: 0, life: 6 + Math.random() * 6, k: Math.min(1, .3 + h[3] / 300)});
-      const s = dt * 1.1 * deg;
-      smoke = smoke.filter(p => (p.age += dt) < p.life);
+      const cap = mobile ? 1500 : 3500;
+      for (const h of active) if (smoke.length < cap && Math.random() < Math.min(1, h[3] / 60) * 8 * dts / 3600)
+        smoke.push({lon: h[0], lat: h[1], age: 0, life: (4 + Math.random() * 4) * 3600, k: Math.min(1, .3 + h[3] / 300)});
+      smoke = smoke.filter(p => (p.age += dts) < p.life);
       for (const p of smoke) {
-        const [u, v] = wind(p.lon, p.lat, i), j = 1 + p.age * .6;
-        p.lon += (u + (Math.random() - .5) * 8 * j) * s / Math.cos(p.lat * R); p.lat += (v + (Math.random() - .5) * 8 * j) * s;
-        const q = map.project([p.lon, p.lat]), r = (3 + p.age * 4) * Math.max(.6, 2 ** (z - 9)) * .6, f = 1 - p.age / p.life;
-        if (q.x < -50 || q.y < -50 || q.x > W + 50 || q.y > H + 50) continue;
-        const gr = gs.createRadialGradient(q.x, q.y, 0, q.x, q.y, r);
-        gr.addColorStop(0, `rgba(214,206,194,${.34 * f * p.k})`); gr.addColorStop(1, 'rgba(214,206,194,0)');
+        const [u, v] = wind(p.lon, p.lat, i), km = dts / 3600, jit = Math.sqrt(dts) * .02;
+        p.lon += (u * km + (Math.random() - .5) * jit) / 111 / Math.cos(p.lat * R); p.lat += (v * km + (Math.random() - .5) * jit) / 111;
+        const q = map.project([p.lon, p.lat]), ah = p.age / 3600, r = Math.max(2, (.4 + 2.5 * ah) / kmpx), f = 1 - p.age / p.life;
+        if (q.x < -r || q.y < -r || q.x > W + r || q.y > H + r) continue;
+        const a = .32 * f * p.k / (1 + ah * .5), gr = gs.createRadialGradient(q.x, q.y, 0, q.x, q.y, r);
+        gr.addColorStop(0, `rgba(214,206,194,${a})`); gr.addColorStop(1, 'rgba(214,206,194,0)');
         gs.fillStyle = gr; gs.fillRect(q.x - r, q.y - r, 2 * r, 2 * r);
       }
     } else smoke = [];

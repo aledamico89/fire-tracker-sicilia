@@ -14,7 +14,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const b = document.getElementById('fBtn'), box = document.getElementById('fBox'), cnt = document.getElementById('fCnt');
-  const upd = () => { cnt.textContent = '· ' + box.querySelectorAll('input:checked').length + ' attivi'; };
+  const upd = () => { cnt.textContent = '· ' + box.querySelectorAll('input[type=checkbox]:checked').length + ' attivi'; };
   b.onclick = () => { box.hidden = !box.hidden; b.setAttribute('aria-expanded', !box.hidden); };
   box.addEventListener('change', upd); upd();
 });
@@ -53,6 +53,7 @@ canvas.spark{width:100%;height:44px;display:block;margin-top:6px}
 .fbtn{display:flex;width:100%;align-items:center;gap:6px;margin-top:10px;background:#1c1d21;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font:inherit;font-size:13px;cursor:pointer}
 .fbtn b{margin-left:auto;transition:transform .2s}.fbtn[aria-expanded=true] b{transform:rotate(180deg)}#fCnt{color:var(--mut);font-size:12px}
 #fBox{padding-top:6px;max-height:55vh;overflow:auto}#fBox .layers,#fBox .legend{display:block!important}#fBox .legend{display:flex!important}
+.fm{font-size:12px;color:var(--mut);display:flex;flex-wrap:wrap;gap:4px 10px;margin:2px 0 6px}.fm label{display:flex;gap:4px;align-items:center;color:var(--txt);cursor:pointer}
 </style>
 </head>
 <body>
@@ -68,6 +69,7 @@ canvas.spark{width:100%;height:44px;display:block;margin-top:6px}
   </div>
   <button id="fBtn" class="fbtn" aria-expanded="false">Livelli e filtri <span id="fCnt"></span><b>▾</b></button>
   <div id="fBox" hidden>
+  <div class="fm">Focolai: <label><input type="radio" name="fm" value="punti" checked> punti (dati)</label> <label><input type="radio" name="fm" value="fiamme"> fiamme (simulazione)</label></div>
   <div class="layers">
     <label><input type="checkbox" id="lFire" checked> Focolai satellitari</label>
     <label><input type="checkbox" id="lWind" checked> Vento (10 m, particelle)</label>
@@ -83,7 +85,7 @@ canvas.spark{width:100%;height:44px;display:block;margin-top:6px}
   </div>
   <details><summary>Metodo e limiti</summary>
     <p>Focolai: rilevazioni satellitari NASA FIRMS (MODIS 1 km, VIIRS 375 m), 6–8 passaggi al giorno; confidenza bassa esclusa. Un punto è un pixel caldo, non un perimetro: fumo e nuvole possono nascondere il fuoco.</p>
-    <p>Vento: particelle animate sul campo ERA5 interpolato. Fumo: <b>simulazione</b>, ogni focolaio emette in proporzione alla potenza misurata dal satellite (FRP) e il pennacchio segue il vento reale; non è una misura. Satellite reale: Sentinel-2 L2A, ultima immagine limpida prima del 22 luglio e prima dopo il 28 luglio, solo il riquadro inquadrato.</p>
+    <p>Vento: particelle animate sul campo ERA5 interpolato. Fumo: <b>simulazione</b>, ogni focolaio emette in proporzione alla potenza misurata dal satellite (FRP) e il pennacchio viaggia con il vento reale nel tempo del replay, si allarga e si diluisce in 4–8 ore; non è una misura. Fiamme: resa visiva dei focolai delle ultime 6 ore, dimensione proporzionale alla potenza. Satellite reale: Sentinel-2 L2A, ultima immagine limpida prima del 22 luglio e prima dopo il 28 luglio, solo il riquadro inquadrato.</p>
     <p>Mezzi aerei: posizioni ADS-B reali dall'archivio open data <a href="https://www.adsb.lol">adsb.lol</a> (ODbL), raccolte da ricevitori volontari. Coprono bene solo le zone vicine ai ricevitori (Trapanese); a bassa quota tra i rilievi il segnale si perde, quindi le tracce sono parziali e non misurano il numero di interventi.</p>
     <p>Meteo: rianalisi ERA5 via Open-Meteo, griglia 0,5°, oraria. Valori indicativi, non misure di stazione.</p>
     <p>Pericolo: Fire Weather Index canadese (Van Wagner 1987) calcolato a mezzogiorno, con i codici di umidità del combustibile accumulati dal 1° aprile. Classi EFFIS.</p>
