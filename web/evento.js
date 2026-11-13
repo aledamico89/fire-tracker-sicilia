@@ -115,3 +115,53 @@ addEventListener('ev-ready', ({detail: E}) => {
   map.on('moveend', later); $('lS2').onchange = later;
   let phase = E.now() < SPLIT; setInterval(() => { const p = E.now() < SPLIT; if (p !== phase) { phase = p; later(); } }, 1000);
 });
+
+// ---- mezzi aerei antincendio: tracce reali ADS-B (adsb.lol, ODbL), parziali; avviso quando un mezzo è fuori copertura
+addEventListener('ev-ready', async ({detail: E}) => {
+  const {map} = E, $ = id => document.getElementById(id), GAP = 300, TAIL = 1800;
+  let A = [];
+  try { A = await fetch('data/aerei.json').then(r => r.ok ? r.json() : []); } catch (_) {}
+  if (!A.length) return;
+  const msg = document.createElement('div'); msg.id = 'acMsg';
+  msg.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(18,19,22,.92);border:1px solid #ffd166;color:#e9e6e1;font:12px/1.4 system-ui,sans-serif;padding:6px 12px;border-radius:14px;max-width:min(560px,92vw);text-align:center;display:none;pointer-events:none';
+  document.body.append(msg);
+  map.addSource('ac-tr', {type: 'geojson', data: {type: 'FeatureCollection', features: []}});
+  map.addSource('ac-pos', {type: 'geojson', data: {type: 'FeatureCollection', features: []}});
+  map.addLayer({id: 'ac-tr', type: 'line', source: 'ac-tr', paint: {'line-color': ['match', ['get', 'tipo'], 'elicottero', '#7fdcff', '#ffe14d'], 'line-width': 2, 'line-opacity': .8, 'line-dasharray': [2, 1]}});
+  map.addLayer({id: 'ac-pos', type: 'circle', source: 'ac-pos', paint: {'circle-radius': 6, 'circle-color': ['match', ['get', 'tipo'], 'elicottero', '#7fdcff', '#ffe14d'], 'circle-stroke-color': '#000', 'circle-stroke-width': 2}});
+  const pop = new maplibregl.Popup({closeButton: false, offset: 10});
+  map.on('mousemove', 'ac-pos', e => { const p = e.features[0].properties;
+    pop.setLngLat(e.lngLat).setHTML(`<b>${p.tipo == 'elicottero' ? 'Elicottero' : 'Canadair'} ${p.r || ''}</b><div>${p.cs || ''} · ${p.alt} m di quota</div><div style="color:#b9b5ae;font-size:11px">posizione ADS-B reale (adsb.lol)</div>`).addTo(map); });
+  map.on('mouseleave', 'ac-pos', () => pop.remove());
+  const vis = () => $('lAc').checked;
+  $('lAc').onchange = () => { ['ac-tr', 'ac-pos'].forEach(l => map.setLayoutProperty(l, 'visibility', vis() ? 'visible' : 'none')); last = -1; tick(); };
+  let last = -1;
+  function tick() {
+    const t = Math.round(E.now());
+    if (t === last) return; last = t;
+    if (!vis()) { msg.style.display = 'none'; return; }
+    const lines = [], pos = []; let off = 0;
+    for (const a of A) {
+      const P = a.pts; if (P[0][0] > t || P[P.length - 1][0] < t - TAIL) { if (P[0][0] <= t + 10800 && P[P.length - 1][0] >= t) {} else continue; }
+      let k = P.findIndex(p => p[0] > t); if (k < 0) k = P.length;      // P[k-1] ≤ t < P[k]
+      const prev = P[k - 1], next = P[k];
+      // scia degli ultimi 30 minuti, interrotta dove manca il segnale
+      let seg = [];
+      for (let j = k - 1; j >= 0 && P[j][0] >= t - TAIL; j--) {
+        if (seg.length && P[j + 1][0] - P[j][0] > GAP) { if (seg.length > 1) lines.push({type: 'Feature', properties: {tipo: a.tipo}, geometry: {type: 'LineString', coordinates: seg}}); seg = []; }
+        seg.push([P[j][1], P[j][2]]);
+      }
+      if (seg.length > 1) lines.push({type: 'Feature', properties: {tipo: a.tipo}, geometry: {type: 'LineString', coordinates: seg}});
+      if (prev && next && next[0] - prev[0] <= GAP) {           // posizione interpolata
+        const f = (t - prev[0]) / (next[0] - prev[0]);
+        pos.push({type: 'Feature', properties: {tipo: a.tipo, r: a.r, cs: a.cs, alt: Math.round((prev[3] + (next[3] - prev[3]) * f) * .3048)},
+          geometry: {type: 'Point', coordinates: [prev[1] + (next[1] - prev[1]) * f, prev[2] + (next[2] - prev[2]) * f]}});
+      } else if (prev && next && t - prev[0] < 3 * 3600 && next[0] - t < 3 * 3600) off++;   // in volo ma senza segnale
+    }
+    map.getSource('ac-tr').setData({type: 'FeatureCollection', features: lines});
+    map.getSource('ac-pos').setData({type: 'FeatureCollection', features: pos});
+    msg.style.display = off ? 'block' : 'none';
+    msg.textContent = `✈ ${off} ${off == 1 ? 'mezzo aereo' : 'mezzi aerei'} in missione ma fuori copertura dei ricevitori in questo momento: a bassa quota tra i rilievi il segnale si perde. L'assenza di traccia non significa assenza di intervento.`;
+  }
+  setInterval(tick, 250);
+});

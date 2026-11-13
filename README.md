@@ -94,6 +94,6 @@ Prototipo di ricerca e divulgazione, **non è un sistema di allerta**. Un focola
 ## Fonti e licenze
 - Codice: MIT.
 - Focolai: [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov). Meteo e aria: [Open-Meteo](https://open-meteo.com) (CC BY 4.0), Copernicus ERA5 e CAMS. Comuni: [openpolis](https://github.com/openpolis/geojson-italy) (CC BY 4.0), popolazione © OpenStreetMap (ODbL).
-- Terreno: Mapzen Terrain Tiles (AWS Open Data). Immagini: Esri World Imagery (attribuzione, uso non commerciale; per uso commerciale licenza Esri o MapTiler). Edifici 3D: OpenFreeMap / OpenStreetMap (ODbL).
+- Terreno: Mapzen Terrain Tiles (AWS Open Data). Immagini: Esri World Imagery (attribuzione, uso non commerciale; per uso commerciale licenza Esri o MapTiler). Edifici 3D: OpenFreeMap / OpenStreetMap (ODbL). Mezzi aerei: posizioni ADS-B da adsb.lol (ODbL), tracce parziali (`scripts/aerei.py`, archivi letti a flusso: ~9 GB → 110 kB).
 
 Costruito con [Claude Code](https://claude.com/claude-code).
