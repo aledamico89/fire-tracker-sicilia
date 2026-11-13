@@ -25,6 +25,18 @@
   });
 })();
 
+// rilievo con il mare piatto: i tasselli terrarium vengono corretti nel browser (quote sotto zero → 0 m)
+if (window.maplibregl) maplibregl.addProtocol('flatsea', async (p, ac) => {
+  const r = await fetch(p.url.replace('flatsea://', 'https://'), {signal: ac.signal});
+  if (!r.ok) throw new Error(r.status);
+  const bmp = await createImageBitmap(await r.blob()), c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d', {willReadFrequently: true});
+  g.drawImage(bmp, 0, 0); const im = g.getImageData(0, 0, c.width, c.height), d = im.data;
+  for (let i = 0; i < d.length; i += 4) if (d[i] < 128) { d[i] = 128; d[i + 1] = 0; d[i + 2] = 0; }   // quota = R·256 + G + B/256 − 32768
+  g.putImageData(im, 0, 0);
+  return {data: await (await c.convertToBlob({type: 'image/png'})).arrayBuffer()};
+});
+var FT_DEM = 'flatsea://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+
 window.FT = {
   // trascinamento verticale di una scheda: segue il dito, al rilascio decide aperta/chiusa; un tocco alterna
   drag(h, el, done, dismissOnly = false) {
@@ -54,13 +66,14 @@ window.FT = {
   },
   // dem: nome di una sorgente raster-dem già presente nella pagina (evita di scaricare due volte il rilievo)
   enhance(map, {dem = null, hill = true, buildings = true, flat = false} = {}) {
-    if (flat) { hill = buildings = false; map.touchZoomRotate.disableRotation(); }
+    if (flat) { hill = buildings = false; map.touchZoomRotate.disableRotation();
+      if (matchMedia('(max-width:700px)').matches) map.once('styledata', () => map.jumpTo(map.cameraForBounds([[12.4, 36.6], [15.7, 38.35]], {padding:{top:60, bottom:190, left:6, right:6}}))); }
     // telefono: lo zoom su un'area lascia spazio alla scheda in basso
     const fb = map.fitBounds.bind(map), mq = matchMedia('(max-width:700px)');
     map.fitBounds = (b, o = {}) => fb(b, mq.matches ? {...o, padding:{top:60, bottom:Math.round(innerHeight * .6), left:24, right:24}} : o);
     const go = () => {
       const below = map.getStyle().layers[1]?.id;
-      if (!dem) { dem = 'ft-dem'; map.addSource(dem, {type:'raster-dem', encoding:'terrarium', tileSize:256, maxzoom:14, tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']}); }
+      if (!dem) { dem = 'ft-dem'; map.addSource(dem, {type:'raster-dem', encoding:'terrarium', tileSize:256, maxzoom:14, tiles:[FT_DEM]}); }
       if (hill) map.addLayer({id:'ft-hill', type:'hillshade', source:dem, paint:{'hillshade-exaggeration':.4, 'hillshade-shadow-color':'#000', 'hillshade-highlight-color':'#fff', 'hillshade-accent-color':'#222'}}, below);
       if (buildings) {
         map.addSource('ft-omt', {type:'vector', url:'https://tiles.openfreemap.org/planet', attribution:'© OpenMapTiles © OpenStreetMap'});
