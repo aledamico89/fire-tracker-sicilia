@@ -1,4 +1,15 @@
 // Pagina evento: particelle del vento, fumo simulato, satellite reale prima/dopo. Si aggancia ai dati del replay (evento 'ev-ready').
+window.EVT = (() => {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:5;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none;width:max-content;max-width:min(560px,92vw)';
+  document.addEventListener('DOMContentLoaded', () => document.body.append(box));
+  return (id, text, ms) => {
+    let el = document.getElementById(id);
+    if (!el) { el = document.createElement('div'); el.id = id; el.style.cssText = 'background:rgba(18,19,22,.94);border:1px solid #ffd166;color:#e9e6e1;font:12px/1.4 system-ui,sans-serif;padding:6px 12px;border-radius:14px;text-align:center'; box.append(el); }
+    el.style.display = text ? 'block' : 'none'; el.textContent = text || '';
+    clearTimeout(el._t); if (text && ms) el._t = setTimeout(() => el.style.display = 'none', ms);
+  };
+})();
 addEventListener('ev-ready', ({detail: E}) => {
   const {map, wx, hot} = E, $ = id => document.getElementById(id), R = Math.PI / 180;
   const hourIdx = () => Math.max(0, Math.min(wx.points[0].ws.length - 1, Math.floor((E.now() - wx.t0) / wx.step)));
@@ -40,7 +51,7 @@ addEventListener('ev-ready', ({detail: E}) => {
     gw.globalCompositeOperation = 'destination-in'; gw.fillStyle = 'rgba(0,0,0,.93)'; gw.fillRect(0, 0, W, H); gw.globalCompositeOperation = 'source-over';
     if ($('lWind').checked && !moving) {
       while (parts.length < N) parts.push(seed());
-      gw.strokeStyle = 'rgba(225,238,255,.7)'; gw.lineWidth = 1.2; gw.beginPath();
+      gw.strokeStyle = 'rgba(120,205,255,.6)'; gw.lineWidth = 1; gw.beginPath();
       const s = dt * 1.4 * deg;   // ~1,4 px/s per km/h
       for (const p of parts) {
         const a = p.px || map.project([p.lon, p.lat]), [u, v] = wind(p.lon, p.lat, i);
@@ -65,7 +76,7 @@ addEventListener('ev-ready', ({detail: E}) => {
         const q = map.project([p.lon, p.lat]), r = (3 + p.age * 4) * Math.max(.6, 2 ** (z - 9)) * .6, f = 1 - p.age / p.life;
         if (q.x < -50 || q.y < -50 || q.x > W + 50 || q.y > H + 50) continue;
         const gr = gs.createRadialGradient(q.x, q.y, 0, q.x, q.y, r);
-        gr.addColorStop(0, `rgba(150,145,140,${.38 * f * p.k})`); gr.addColorStop(1, 'rgba(120,115,110,0)');
+        gr.addColorStop(0, `rgba(214,206,194,${.34 * f * p.k})`); gr.addColorStop(1, 'rgba(214,206,194,0)');
         gs.fillStyle = gr; gs.fillRect(q.x - r, q.y - r, 2 * r, 2 * r);
       }
     } else smoke = [];
@@ -77,16 +88,16 @@ addEventListener('ev-ready', ({detail: E}) => {
   // ---- satellite reale prima/dopo: solo il riquadro inquadrato, letto dai file Sentinel-2 (COG) su AWS
   const UTM = '+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs', SPLIT = Date.UTC(2023, 6, 24) / 1000;
   let key = null, timer = null, busy = false;
-  const lbl = t => { $('s2lbl').textContent = t; };
+  const lbl = (t, ms) => EVT('s2Msg', t ? '🛰 ' + t : '', ms);
   const hide = () => { if (map.getLayer('s2')) map.setLayoutProperty('s2', 'visibility', 'none'); };
   async function s2() {
     if (!$('lS2').checked) { hide(); lbl(''); key = null; return; }
-    if (map.getZoom() < 10.5) { hide(); key = null; lbl('Avvicinati (zoom di zona) per vedere le immagini reali.'); return; }
+    if (map.getZoom() < 10.5) { hide(); key = null; lbl('Avvicinati per vedere le immagini satellitari reali'); return; }
     if (busy) return;
     const pre = E.now() < SPLIT, c = map.getCenter(), b = map.getBounds();
     const half = .12, box = [Math.max(b.getWest(), c.lng - half), Math.max(b.getSouth(), c.lat - half * .8), Math.min(b.getEast(), c.lng + half), Math.min(b.getNorth(), c.lat + half * .8)];
     const k = (pre ? 'pre' : 'post') + box.map(v => v.toFixed(2)).join();
-    if (k === key) return; key = k; busy = true; lbl('Cerco l\'immagine Sentinel-2…');
+    if (k === key) return; key = k; busy = true; lbl('Carico l\'immagine satellitare… qualche secondo');
     try {
       const r = await fetch('https://earth-search.aws.element84.com/v1/search', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
         collections: ['sentinel-2-l2a'], intersects: {type: 'Point', coordinates: [c.lng, c.lat]}, query: {'eo:cloud_cover': {lt: 10}}, limit: 20,
@@ -97,7 +108,7 @@ addEventListener('ev-ready', ({detail: E}) => {
       const u = [[box[0], box[1]], [box[2], box[1]], [box[2], box[3]], [box[0], box[3]]].map(p => proj4('EPSG:4326', UTM, p));
       const x0 = Math.min(...u.map(p => p[0])), x1 = Math.max(...u.map(p => p[0])), y0 = Math.min(...u.map(p => p[1])), y1 = Math.max(...u.map(p => p[1]));
       const sc = Math.min(1, 1400 / (Math.max(x1 - x0, y1 - y0) / 10)), Wd = Math.round((x1 - x0) / 10 * sc), Hd = Math.round((y1 - y0) / 10 * sc);
-      lbl('Scarico il riquadro…');
+      lbl('Scarico il riquadro inquadrato…');
       const ras = await (await GeoTIFF.fromUrl(it.assets.visual.href)).readRasters({bbox: [x0, y0, x1, y1], width: Wd, height: Hd, interleave: true});
       const cv = document.createElement('canvas'); cv.width = Wd; cv.height = Hd; const g = cv.getContext('2d'), im = g.createImageData(Wd, Hd);
       for (let i = 0, j = 0; i < ras.length; i += 3, j += 4) { im.data[j] = ras[i]; im.data[j + 1] = ras[i + 1]; im.data[j + 2] = ras[i + 2]; im.data[j + 3] = ras[i] + ras[i + 1] + ras[i + 2] ? 255 : 0; }
@@ -107,12 +118,18 @@ addEventListener('ev-ready', ({detail: E}) => {
       if (map.getSource('s2')) map.getSource('s2').updateImage(src);
       else { map.addSource('s2', {type: 'image', ...src}); map.addLayer({id: 's2', type: 'raster', source: 's2', paint: {'raster-fade-duration': 300}}, 'shade'); }
       map.setLayoutProperty('s2', 'visibility', 'visible');
-      lbl(`Sentinel-2, ${pre ? 'prima' : 'dopo'} gli incendi: ${it.properties.datetime.slice(0, 10).split('-').reverse().join('/')} (10 m)`);
+      lbl(`Sentinel-2 ${pre ? 'prima' : 'dopo'} gli incendi · ${it.properties.datetime.slice(0, 10).split('-').reverse().join('/')} · sposta il player oltre il 24/7 per il confronto`, 6000);
     } catch (e) { lbl('Immagine non disponibile: ' + e.message); key = null; }
     finally { busy = false; }
   }
   const later = () => { clearTimeout(timer); timer = setTimeout(s2, 600); };
-  map.on('moveend', later); $('lS2').onchange = later;
+  map.on('moveend', later);
+  $('lS2').onchange = () => {
+    if ($('lS2').checked && map.getZoom() < 10.5) {   // porta sull'incendio più intenso delle ultime 24 h (o su Monreale)
+      const t = E.now(), h = hot.filter(p => p[2] <= t && t - p[2] < 86400).sort((a, b) => b[3] - a[3])[0];
+      map.flyTo({center: h ? [h[0], h[1]] : [13.29, 38.08], zoom: 11.6, pitch: 45, duration: 2500});
+    } else later();
+  };
   let phase = E.now() < SPLIT; setInterval(() => { const p = E.now() < SPLIT; if (p !== phase) { phase = p; later(); } }, 1000);
 });
 
@@ -122,9 +139,6 @@ addEventListener('ev-ready', async ({detail: E}) => {
   let A = [];
   try { A = await fetch('data/aerei.json').then(r => r.ok ? r.json() : []); } catch (_) {}
   if (!A.length) return;
-  const msg = document.createElement('div'); msg.id = 'acMsg';
-  msg.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(18,19,22,.92);border:1px solid #ffd166;color:#e9e6e1;font:12px/1.4 system-ui,sans-serif;padding:6px 12px;border-radius:14px;max-width:min(560px,92vw);text-align:center;display:none;pointer-events:none';
-  document.body.append(msg);
   map.addSource('ac-tr', {type: 'geojson', data: {type: 'FeatureCollection', features: []}});
   map.addSource('ac-pos', {type: 'geojson', data: {type: 'FeatureCollection', features: []}});
   map.addLayer({id: 'ac-tr', type: 'line', source: 'ac-tr', paint: {'line-color': ['match', ['get', 'tipo'], 'elicottero', '#7fdcff', '#ffe14d'], 'line-width': 2, 'line-opacity': .8, 'line-dasharray': [2, 1]}});
@@ -135,11 +149,12 @@ addEventListener('ev-ready', async ({detail: E}) => {
   map.on('mouseleave', 'ac-pos', () => pop.remove());
   const vis = () => $('lAc').checked;
   $('lAc').onchange = () => { ['ac-tr', 'ac-pos'].forEach(l => map.setLayoutProperty(l, 'visibility', vis() ? 'visible' : 'none')); last = -1; tick(); };
+  ['ac-tr', 'ac-pos'].forEach(l => map.setLayoutProperty(l, 'visibility', vis() ? 'visible' : 'none'));
   let last = -1;
   function tick() {
     const t = Math.round(E.now());
     if (t === last) return; last = t;
-    if (!vis()) { msg.style.display = 'none'; return; }
+    if (!vis()) { EVT('acMsg', ''); return; }
     const lines = [], pos = []; let off = 0;
     for (const a of A) {
       const P = a.pts; if (P[0][0] > t || P[P.length - 1][0] < t - TAIL) { if (P[0][0] <= t + 10800 && P[P.length - 1][0] >= t) {} else continue; }
@@ -160,8 +175,7 @@ addEventListener('ev-ready', async ({detail: E}) => {
     }
     map.getSource('ac-tr').setData({type: 'FeatureCollection', features: lines});
     map.getSource('ac-pos').setData({type: 'FeatureCollection', features: pos});
-    msg.style.display = off ? 'block' : 'none';
-    msg.textContent = `✈ ${off} ${off == 1 ? 'mezzo aereo' : 'mezzi aerei'} in missione ma fuori copertura dei ricevitori in questo momento: a bassa quota tra i rilievi il segnale si perde. L'assenza di traccia non significa assenza di intervento.`;
+    EVT('acMsg', off && `✈ ${off} ${off == 1 ? 'mezzo aereo' : 'mezzi aerei'} in missione ma fuori copertura dei ricevitori in questo momento: a bassa quota tra i rilievi il segnale si perde. L'assenza di traccia non significa assenza di intervento.`);
   }
   setInterval(tick, 250);
 });
